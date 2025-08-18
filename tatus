@@ -1,0 +1,7 @@
+[33m51f567f[m[33m ([m[1;36mHEAD -> [m[1;32madded[m[33m)[m Add comprehensive project files including backend infrastructure, frontend components, and documentation - excluding large files
+[33md4317d4[m Implement module-free Terraform template with public providers only
+[33m1a06d57[m Simplify Terraform config to allow template push without Docker validation
+[33m9606c74[m Update Terraform config to use public Docker provider instead of private registry
+[33m55b56f6[m Add Terraform provider lock file for reproducible builds
+[33m2cb05ca[m Add backend infrastructure and update gitignore
+[33m030546c[m[33m ([m[1;31morigin/added[m[33m, [m[1;32mmaster[m[33m)[m Initial commit: VS Code hosting pricing page with UI improvements
