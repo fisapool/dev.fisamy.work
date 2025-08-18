@@ -1,106 +1,131 @@
 terraform {
+  required_version = ">= 1.5.0"
   required_providers {
-    coder  = { source = "coder/coder" }
-    # docker = { source = "kreuzwerker/docker" }  # Temporarily commented out
+    coder  = { source = "coder/coder", version = ">= 0.9.12" }
+    docker = { source = "kreuzwerker/docker", version = ">= 3.0.2" }
   }
 }
 
 provider "coder" {}
-# provider "docker" {}  # Temporarily commented out
 
-# ========== Parameters (show in Coder UI) ==========
+# If the Coder server runs on the same host as Docker, defaults work.
+# Otherwise: provider "docker" { host = "unix:///var/run/docker.sock" }
+provider "docker" {}
+
+# ---------- Parameters ----------
 variable "workspace_name" {
-  description = "Workspace name"
-  type        = string
-  default     = "vscode-ai"
+  type    = string
+  default = "vscode-ai"
 }
 
-variable "openai_api_key" {
-  description = "OpenAI (or compatible) API key"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "openai_base_url" {
-  description = "OpenAI-compatible base URL (e.g., https://ai.dev.fisamy.work/v1)"
-  type        = string
-  default     = ""
-}
-
-variable "codeium_api_key" {
-  description = "Codeium key (optional)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "tabby_endpoint" {
-  description = "Tabby endpoint (optional)"
-  type        = string
-  default     = ""
-}
-
-variable "cpu"  { 
+variable "cpu" {
   type    = number
   default = 2
 }
 
-variable "ram"  { 
+variable "ram_mb" {
   type    = number
   default = 4096   # MB
 }
 
-variable "disk" { 
+variable "disk_gb" {
   type    = number
   default = 20     # GB
 }
 
-# ========== Agent (runs inside container/VM) ==========
+variable "coder_access_url" {
+  type    = string
+  default = "https://dev.fisamy.work"
+}
+
+# AI creds / endpoints (env-driven "pre-login")
+variable "openai_api_key" {
+  type      = string
+  sensitive = true
+}
+
+variable "openai_base_url" {
+  type    = string
+  default = ""
+}
+
+variable "codeium_api_key" {
+  type      = string
+  sensitive = true
+  default  = ""
+}
+
+variable "tabby_endpoint" {
+  type    = string
+  default = ""
+}
+
+# ---------- Coder Agent (Terraform manages the token/id) ----------
 resource "coder_agent" "dev" {
   os   = "linux"
   arch = "amd64"
   dir  = "/home/workspace"
-
-  startup_script = <<-EOT
-    #!/bin/bash
-    set -e
-    
-    # Start OpenVSCode on port 3000
-    /openvscode-server/bin/openvscode-server \
-      --host 0.0.0.0 \
-      --port 3000 \
-      --connection-token "$CODER_TOKEN" &
-    
-    # Wait for the server to start
-    sleep 5
-    
-    # Keep the container running
-    wait
-  EOT
+  # The agent process itself is started inside the container (see docker_container.command).
 }
 
-# ========== Workspace container via Docker ==========
-# Temporarily commented out to allow template push
-# resource "docker_container" "workspace" {
-#   name  = "coder-${var.workspace_name}-${coder_agent.dev.id}"
-#   image = "ghcr.io/gitpod-io/openvscode-server:latest"
-#   
-#   env = [
-#     "OPENAI_API_KEY=${var.openai_api_key}",
-#     "OPENAI_BASE_URL=${var.openai_base_url}",
-#     "CODEIUM_API_KEY=${var.codeium_api_key}",
-#     "TABBY_ENDPOINT=${var.tabby_endpoint}",
-#     "OPENVSCODE_SERVER_CONNECTION_TOKEN=$CODER_TOKEN"
-#   ]
-#   
-#   ports {
-#     internal = 3000
-#     external = 0
-#   }
-# }
+# ---------- Workspace container ----------
+# Use your prebuilt image with AI extensions/settings:
+#   docker build -t openvscode-ai:latest ./openvscode-ai
+resource "docker_image" "ide" {
+  name = "openvscode-ai:latest"
+  # fallback image if you haven't built your own yet:
+  # name = "ghcr.io/gitpod-io/openvscode-server:latest"
+  keep_locally = true
+}
 
-# Expose the IDE as a Coder "app" (Dev URL, subdomain)
+resource "docker_volume" "home" {
+  name = "vscode_ai_${var.workspace_name}_home"
+}
+
+resource "docker_container" "ws" {
+  name  = "vscode-ai-${var.workspace_name}"
+  image = docker_image.ide.name
+  restart = "unless-stopped"
+
+  # No host port mapping needed; Coder proxies via Dev URL. We still expose 3000 inside.
+  ports {
+    internal = 3000
+    protocol = "tcp"
+  }
+
+  mounts {
+    target = "/home/workspace"
+    type   = "volume"
+    source = docker_volume.home.name
+  }
+
+  # Inject AI creds/endpoints so extensions "just work"
+  env = [
+    "OPENAI_API_KEY=${var.openai_api_key}",
+    "OPENAI_BASE_URL=${var.openai_base_url}",
+    "CODEIUM_API_KEY=${var.codeium_api_key}",
+    "TABBY_ENDPOINT=${var.tabby_endpoint}",
+  ]
+
+  # Note: Docker provider doesn't support CPU/memory limits via Terraform
+  # Use Docker daemon configs or host-level resource management for hard caps
+
+  # Start the agent, then the IDE. Agent registers using the Terraform-provided token.
+  command = [
+    "sh", "-lc",
+    join(" && ", [
+      "set -e",
+      # install coder CLI/agent
+      "curl -fsSL https://coder.com/install.sh | sh -s -- --bin-dir /usr/local/bin >/dev/null",
+      # start agent in background (registers using token from TF)
+      "coder agent start --name ${var.workspace_name} --url ${var.coder_access_url} --token ${coder_agent.dev.token} --workspace /home/workspace &",
+      # launch OpenVSCode
+      "/openvscode-server/bin/openvscode-server --host 0.0.0.0 --port 3000"
+    ])
+  ]
+}
+
+# Dev URL in Coder UI
 resource "coder_app" "vscode" {
   agent_id     = coder_agent.dev.id
   slug         = "vscode"
@@ -108,12 +133,4 @@ resource "coder_app" "vscode" {
   icon         = "vscode"
   url          = "http://localhost:3000"
   subdomain    = true
-}
-
-output "hint" {
-  value = "Use Dev URL for IDE. Env vars are injected for AI logins."
-}
-
-output "workspace_url" {
-  value = "Workspace will be accessible via Dev URL: vscode--${var.workspace_name}--[username].dev.fisamy.work"
 }
