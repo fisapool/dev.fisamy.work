@@ -1,0 +1,5 @@
+{
+  "name": "VS Code Hosting Pricing Page",
+  "description": "A responsive pricing page for a cloud-based VS Code hosting service, built with React and TailwindCSS.",
+  "requestFramePermissions": []
+}
