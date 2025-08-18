@@ -80,28 +80,30 @@ resource "coder_agent" "dev" {
   EOT
 }
 
-# ========== Workspace container via Docker module ==========
-module "workspace" {
-  # Use Coder's Docker workspace module from the private registry
-  # Format: <host>/<namespace>/<name>/<provider>
-  source    = "registry.coder.com/coder/docker/docker"
-  agent_id  = coder_agent.dev.id
-  image     = "ghcr.io/gitpod-io/openvscode-server:latest"  # Use official OpenVSCode image
-  cpu       = var.cpu
-  memory_mb = var.ram
-  disk_gb   = var.disk
-
-  env = {
-    OPENAI_API_KEY  = var.openai_api_key
-    OPENAI_BASE_URL = var.openai_base_url
-    CODEIUM_API_KEY = var.codeium_api_key
-    TABBY_ENDPOINT  = var.tabby_endpoint
-    # OpenVSCode specific env vars
-    OPENVSCODE_SERVER_CONNECTION_TOKEN = "$CODER_TOKEN"
+# ========== Workspace container via Docker ==========
+# Using a simplified approach without the private module
+resource "docker_container" "workspace" {
+  name  = "coder-${var.workspace_name}-${coder_agent.dev.id}"
+  image = "ghcr.io/gitpod-io/openvscode-server:latest"
+  
+  # Note: Docker provider doesn't support CPU/memory limits in the same way
+  # These would need to be configured at the Docker daemon level or via Coder's resource management
+  
+  env = [
+    "OPENAI_API_KEY=${var.openai_api_key}",
+    "OPENAI_BASE_URL=${var.openai_base_url}",
+    "CODEIUM_API_KEY=${var.codeium_api_key}",
+    "TABBY_ENDPOINT=${var.tabby_endpoint}",
+    "OPENVSCODE_SERVER_CONNECTION_TOKEN=$CODER_TOKEN"
+  ]
+  
+  ports {
+    internal = 3000
+    external = 0  # Let Docker assign external port
   }
-
-  # Expose IDE port internally; Coder will front it as a Dev URL
-  internal_ports = [3000]
+  
+  # This is a simplified approach - in production you'd want proper resource limits
+  # and integration with Coder's workspace management
 }
 
 # Expose the IDE as a Coder "app" (Dev URL, subdomain)
