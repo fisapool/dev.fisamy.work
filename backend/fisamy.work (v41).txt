@@ -1,0 +1,71 @@
+;;
+;; Domain:     fisamy.work.
+;; Exported:   2025-08-18 09:03:43
+;;
+;; This file is intended for use for informational and archival
+;; purposes ONLY and MUST be edited before use on a production
+;; DNS server.  In particular, you must:
+;;   -- update the SOA record with the correct authoritative name server
+;;   -- update the SOA record with the contact e-mail address information
+;;   -- update the NS record(s) with the authoritative name servers for this domain.
+;;
+;; For further information, please consult the BIND documentation
+;; located on the following website:
+;;
+;; http://www.isc.org/
+;;
+;; And RFC 1035:
+;;
+;; http://www.ietf.org/rfc/rfc1035.txt
+;;
+;; Please note that we do NOT offer technical support for any use
+;; of this zone data, the BIND name server, or any other third-party
+;; DNS software.
+;;
+;; Use at your own risk.
+;; SOA Record
+fisamy.work	3600	IN	SOA	brynne.ns.cloudflare.com. dns.cloudflare.com. 2050717442 10000 2400 604800 3600
+
+;; NS Records
+fisamy.work.	86400	IN	NS	brynne.ns.cloudflare.com.
+fisamy.work.	86400	IN	NS	martin.ns.cloudflare.com.
+
+;; A Records
+ai.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:false
+fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+grafana.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+key.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+link.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+mail.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:false
+outline.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+prom.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:false
+redeem.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+static.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+status.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+support.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:true
+dev.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:false
+*.dev.fisamy.work.	1	IN	A	175.139.1.113 ; cf_tags=cf-proxied:false
+
+;; AAAA Records
+ai.fisamy.work.	1	IN	AAAA	2001:e68:58f8:a800:62cf:84ff:fec1:4f7d ; cf_tags=cf-proxied:false
+fisamy.work.	1	IN	AAAA	2001:e68:5810:51bc:90f5:4f06:827f:88c1 ; cf_tags=cf-proxied:true
+
+;; CNAME Records
+api.fisamy.work.	1	IN	CNAME	vpn.fisamy.work. ; cf_tags=cf-proxied:true
+code.fisamy.work.	600	IN	CNAME	80a5a70e91f85308.vercel-dns-017.com. ; cf_tags=cf-proxied:false
+game.fisamy.work.	600	IN	CNAME	e0560202475dda7b.vercel-dns-017.com. ; cf_tags=cf-proxied:false
+n8n.fisamy.work.	1	IN	CNAME	vpn.fisamy.work. ; cf_tags=cf-proxied:true
+vpn.fisamy.work.	600	IN	CNAME	9c3787f9be6582d4.vercel-dns-017.com. ; cf_tags=cf-proxied:false
+www.fisamy.work.	1	IN	CNAME	fisamy.work. ; cf_tags=cf-proxied:true
+
+;; MX Records
+fisamy.work.	1	IN	MX	10 mail.fisamy.work.
+fisamy.work.	1	IN	MX	0 .
+
+;; TXT Records
+default._domainkey.fisamy.work.	1	IN	TXT	"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAykAG0e2OZ9wHxxLnqh55MKQ/AV8JtQ0c6Xnro5pMUqHbM8VawENr5H+cRdIOqVRNWvp85JM8x+LndzIWkRMYxoDijNVHsABk/ECjPtObfT70HTmgJO+Trw0Ca+hsXPcApAl/N/sUj7Uo9f/BDHV0mBdMErTEqPK0ed1VXZpfd9dK2qUY6XRZZkfwuiq49lrkx" "1ppwkCh/Hem++BUpLmUaJW7Gp0J8eysubIeivhEDkgLoSyb2xXZdUhA2WwhURJ6WUp/vxoCIH3RgPInpCbq9DvKrgKSan5fVskk96JDc0aJ+ymK2+wgRv/0K2xNZdetNFq4ptKKSBervrc7ULVrmQIDAQAB"
+_dmarc.fisamy.work.	1	IN	TXT	"v=DMARC1;p=quarantine;rua=mailto:admin@fisamy.work"
+fisamy.work.	1	IN	TXT	"v=spf1 +a +mx +ip4:175.139.1.113 -all"
+_vercel.fisamy.work.	600	IN	TXT	"vc-domain-verify=code.fisamy.work,72382e9b93cbafc3facb,dc"
+_vercel.fisamy.work.	600	IN	TXT	"vc-domain-verify=game.fisamy.work,6410d7897747ac791fb9,dc"
+_vercel.fisamy.work.	600	IN	TXT	"vc-domain-verify=vpn.fisamy.work,e23237d89d1298e97867,dc"

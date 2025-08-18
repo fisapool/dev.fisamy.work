@@ -1,0 +1,6 @@
+workspace_name: "arif-dev"
+openai_base_url: "https://ai.dev.fisamy.work/v1"
+tabby_endpoint: "https://tabby.dev.fisamy.work"
+cpu: 4
+ram: 8192
+disk: 40
