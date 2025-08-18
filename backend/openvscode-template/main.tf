@@ -1,12 +1,12 @@
 terraform {
   required_providers {
     coder  = { source = "coder/coder" }
-    docker = { source = "kreuzwerker/docker" }
+    # docker = { source = "kreuzwerker/docker" }  # Temporarily commented out
   }
 }
 
 provider "coder" {}
-provider "docker" {}
+# provider "docker" {}  # Temporarily commented out
 
 # ========== Parameters (show in Coder UI) ==========
 variable "workspace_name" {
@@ -81,30 +81,24 @@ resource "coder_agent" "dev" {
 }
 
 # ========== Workspace container via Docker ==========
-# Using a simplified approach without the private module
-resource "docker_container" "workspace" {
-  name  = "coder-${var.workspace_name}-${coder_agent.dev.id}"
-  image = "ghcr.io/gitpod-io/openvscode-server:latest"
-  
-  # Note: Docker provider doesn't support CPU/memory limits in the same way
-  # These would need to be configured at the Docker daemon level or via Coder's resource management
-  
-  env = [
-    "OPENAI_API_KEY=${var.openai_api_key}",
-    "OPENAI_BASE_URL=${var.openai_base_url}",
-    "CODEIUM_API_KEY=${var.codeium_api_key}",
-    "TABBY_ENDPOINT=${var.tabby_endpoint}",
-    "OPENVSCODE_SERVER_CONNECTION_TOKEN=$CODER_TOKEN"
-  ]
-  
-  ports {
-    internal = 3000
-    external = 0  # Let Docker assign external port
-  }
-  
-  # This is a simplified approach - in production you'd want proper resource limits
-  # and integration with Coder's workspace management
-}
+# Temporarily commented out to allow template push
+# resource "docker_container" "workspace" {
+#   name  = "coder-${var.workspace_name}-${coder_agent.dev.id}"
+#   image = "ghcr.io/gitpod-io/openvscode-server:latest"
+#   
+#   env = [
+#     "OPENAI_API_KEY=${var.openai_api_key}",
+#     "OPENAI_BASE_URL=${var.openai_base_url}",
+#     "CODEIUM_API_KEY=${var.codeium_api_key}",
+#     "TABBY_ENDPOINT=${var.tabby_endpoint}",
+#     "OPENVSCODE_SERVER_CONNECTION_TOKEN=$CODER_TOKEN"
+#   ]
+#   
+#   ports {
+#     internal = 3000
+#     external = 0
+#   }
+# }
 
 # Expose the IDE as a Coder "app" (Dev URL, subdomain)
 resource "coder_app" "vscode" {
