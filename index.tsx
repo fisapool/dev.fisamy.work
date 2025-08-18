@@ -8,11 +8,11 @@ import ReactDOM from "react-dom/client";
 // VS Code Hosting – Pricing + Comparison + FAQ
 // Drop-in component for a Landing/Pricing page.
 // TailwindCSS required. No external UI libs. No icons needed.
-// Replace CHECKOUT_* links with your Stripe/Cart URLs.
+// Checkout URLs are configured via environment variables.
 
-const CHECKOUT_SOLO = "https://your-checkout/solo";
-const CHECKOUT_PRO = "https://your-checkout/pro";
-const CHECKOUT_TEAM = "https://your-checkout/team";
+const CHECKOUT_SOLO = import.meta.env.VITE_CHECKOUT_SOLO || "https://your-checkout/solo";
+const CHECKOUT_PRO = import.meta.env.VITE_CHECKOUT_PRO || "https://your-checkout/pro";
+const CHECKOUT_TEAM = import.meta.env.VITE_CHECKOUT_TEAM || "https://your-checkout/team";
 
 const plans = [
   {

@@ -1,0 +1,90 @@
+version: "3.8"
+
+networks:
+  edge:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  coder_data:
+  pg_data:
+  domain_configs:  # New volume for custom domain configs
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: coder-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=coder
+      - POSTGRES_USER=coder
+      - POSTGRES_PASSWORD=${CODER_PG_PASSWORD:?set_env_var}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [edge]
+
+  coder:
+    image: ghcr.io/coder/coder:latest
+    container_name: coder
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      - CODER_PG_CONNECTION_URL=postgresql://coder:${CODER_PG_PASSWORD}@postgres:5432/coder?sslmode=disable
+      - CODER_HTTP_ADDRESS=0.0.0.0:3000
+      # Set to your public URL (no trailing slash)
+      - CODER_ACCESS_URL=${CODER_ACCESS_URL:-https://dev.fisamy.work}
+      # Enable workspace autostop; users can override per-template up to max below
+      - CODER_DEFAULT_WORKSPACE_IDLE_TIMEOUT=${CODER_DEFAULT_WORKSPACE_IDLE_TIMEOUT:-30m}
+      # Hard cap resources per workspace (adjust to your host). Example: 4 CPUs, 8Gi RAM, 50Gi disk
+      - CODER_MAX_WORKSPACE_CPUS=${CODER_MAX_WORKSPACE_CPUS:-4}
+      - CODER_MAX_WORKSPACE_MEMORY=${CODER_MAX_WORKSPACE_MEMORY:-8Gi}
+      - CODER_MAX_WORKSPACE_DISK=${CODER_MAX_WORKSPACE_DISK:-50Gi}
+      # Allow Dev URLs on subdomains: *.dev.fisamy.work -> coder
+      - CODER_WILDCARD_ACCESS=true
+      - CODER_WILDCARD_HOST=dev.fisamy.work
+    volumes:
+      - coder_data:/var/lib/coder
+      # Allow Coder to start Docker-based workspaces on this host
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3000:3000"  # temporarily accessible via server IP for setup
+    networks: [edge]
+
+  domain-manager:
+    image: node:18-alpine
+    container_name: domain-manager
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - coder
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://coder:${CODER_PG_PASSWORD}@postgres:5432/coder
+      - CODER_URL=http://coder:3000
+      - CODER_API_TOKEN=${CODER_API_TOKEN:-}
+      - PORT=3001
+    volumes:
+      - domain_configs:/app/domains
+      - ./domain-manager:/app
+    working_dir: /app
+    command: ["sh", "-c", "npm install && node server.js"]
+    networks: [edge]
+
+  caddy:
+    image: caddy:2.8.4
+    container_name: caddy
+    restart: unless-stopped
+    depends_on:
+      - coder
+      - domain-manager
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.custom-domains:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - domain_configs:/etc/caddy/custom-domains:ro  # Mount custom domain configs
+    networks: [edge]

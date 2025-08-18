@@ -23,3 +23,26 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+
+# Large files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

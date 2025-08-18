@@ -1,0 +1,86 @@
+# Coder Provider-Grade Caddy Configuration
+# This handles both the Coder UI and wildcard workspace routing
+
+# Main Coder UI
+dev.fisamy.work {
+    reverse_proxy coder:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    
+    # Enable compression
+    encode gzip
+    
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: wss:;"
+    }
+    
+    # Handle WebSocket connections for real-time features
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websocket coder:3000
+}
+
+# Wildcard routing for workspace dev URLs
+# This allows workspaces to be accessible at *.dev.fisamy.work
+*.dev.fisamy.work {
+    # Skip the main domain
+    @notMain {
+        not host dev.fisamy.work
+    }
+    
+    reverse_proxy @notMain coder:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    
+    # Enable compression
+    encode gzip
+    
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+    
+    # Handle WebSocket connections
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websocket coder:3000
+}
+
+# Health check endpoints
+health.dev.fisamy.work {
+    respond "OK" 200
+    header Content-Type text/plain
+}
+
+# Coder health endpoint
+dev.fisamy.work/healthz {
+    reverse_proxy coder:3000
+}
+
+# API endpoints
+dev.fisamy.work/api/* {
+    reverse_proxy coder:3000
+}
+
+# Static assets
+dev.fisamy.work/static/* {
+    reverse_proxy coder:3000
+}

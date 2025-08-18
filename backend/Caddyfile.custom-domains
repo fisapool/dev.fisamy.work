@@ -1,0 +1,53 @@
+{
+  # email admin@fisamy.work
+  # debug
+  servers {
+    timeouts {
+      read_body   1m
+      read_header 30s
+      write       5m
+      idle        2m
+    }
+  }
+}
+
+# Primary Coder UI
+dev.fisamy.work {
+  encode zstd gzip
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  reverse_proxy coder:3000 {
+    flush_interval -1
+  }
+}
+
+# Wildcard for Dev URLs (workspace apps / IDEs)
+*.dev.fisamy.work {
+  encode zstd gzip
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  reverse_proxy coder:3000 {
+    flush_interval -1
+  }
+}
+
+# Custom Domain Handler - Dynamic routing
+# This will be populated by the domain management system
+import /etc/caddy/custom-domains/*.caddy
+
+# Fallback for unhandled domains
+:80, :443 {
+  respond "Domain not configured" 404
+}

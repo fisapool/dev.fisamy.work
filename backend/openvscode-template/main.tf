@@ -42,6 +42,7 @@ variable "coder_access_url" {
 variable "openai_api_key" {
   type      = string
   sensitive = true
+  default   = ""
 }
 
 variable "openai_base_url" {
@@ -58,6 +59,12 @@ variable "codeium_api_key" {
 variable "tabby_endpoint" {
   type    = string
   default = ""
+}
+
+# Optional: annotate containers with resource labels for external monitoring/quotas
+variable "enable_resource_labels" {
+  type    = bool
+  default = true
 }
 
 # ---------- Coder Agent (Terraform manages the token/id) ----------
@@ -115,14 +122,20 @@ resource "docker_container" "ws" {
     "sh", "-lc",
     join(" && ", [
       "set -e",
-      # install coder CLI/agent
-      "curl -fsSL https://coder.com/install.sh | sh -s -- --bin-dir /usr/local/bin >/dev/null",
       # start agent in background (registers using token from TF)
       "coder agent start --name ${var.workspace_name} --url ${var.coder_access_url} --token ${coder_agent.dev.token} --workspace /home/workspace &",
       # launch OpenVSCode
       "/openvscode-server/bin/openvscode-server --host 0.0.0.0 --port 3000"
     ])
   ]
+
+  # Optional labels used by external monitors or policy enforcers
+  labels = var.enable_resource_labels ? {
+    "com.fisamy.workspace.name"  = var.workspace_name,
+    "com.fisamy.resource.cpu"    = tostring(var.cpu),
+    "com.fisamy.resource.memory" = tostring(var.ram_mb),
+    "com.fisamy.resource.disk"   = tostring(var.disk_gb)
+  } : null
 }
 
 # Dev URL in Coder UI

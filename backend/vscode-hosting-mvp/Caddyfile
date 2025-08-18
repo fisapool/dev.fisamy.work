@@ -1,0 +1,68 @@
+# VSCode Hosting MVP - Caddy Configuration
+# Replace REPLACE_WITH_HASHED_PASSWORD with actual bcrypt hash
+
+# Alice's workspace
+alice.dev.fisamy.work {
+    basicauth {
+        alice REPLACE_WITH_HASHED_PASSWORD
+    }
+    
+    reverse_proxy alice-openvscode:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    
+    # Enable compression
+    encode gzip
+    
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
+
+# Bob's workspace
+bob.dev.fisamy.work {
+    basicauth {
+        bob REPLACE_WITH_HASHED_PASSWORD
+    }
+    
+    reverse_proxy bob-openvscode:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    
+    # Enable compression
+    encode gzip
+    
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
+
+# Main landing page (optional - can point to your frontend)
+dev.fisamy.work {
+    # If you want to serve the frontend from here
+    # root * /var/www/html
+    # file_server
+    
+    # Or redirect to your main domain
+    redir https://code.fisamy.work{uri} permanent
+}
+
+# Health check endpoint
+health.dev.fisamy.work {
+    respond "OK" 200
+    header Content-Type text/plain
+}
