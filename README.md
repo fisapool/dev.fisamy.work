@@ -2,19 +2,50 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Code.fisamy.work - VS Code Hosting Platform
 
-This contains everything you need to run your app locally.
+A modern, scalable platform for hosting VS Code workspaces in the cloud.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1063hpgcnYukgihbCS1_6yuIjDpsQ4Q-z
+##  Choose Your Path
 
-## Run Locally
+This project offers two deployment approaches:
 
-**Prerequisites:**  Node.js
+### **Option 1: Coder (Enterprise-Grade)**
+- Full Coder platform with advanced features
+- Multi-tenant workspace management
+- Professional templates and quotas
+- **Status**: Templates need to be created (no-gpu/gpu missing)
+- **Best for**: Production deployments, teams, enterprise use
 
+### **Option 2: Coder-lite (Simple & Fast)**
+- OpenVSCode + Caddy bundle
+- Per-user limits and quotas
+- Idle reaper and Python devctl CLI
+- **Status**: Ready to deploy
+- **Best for**: Quick setup, small teams, MVP deployments
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 📁 Project Structure
+
+- `frontend/` - React SPA (Vite 6, React 19)
+- `back-end/` - FastAPI BFF with Coder integration
+- `coder-lite/` - OpenVSCode + Caddy deployment
+- `coder-templates/` - Coder workspace templates
+
+##  Quick Start
+
+1. **Frontend**: `npm install && npm run build`
+2. **Backend**: Choose your path above
+3. **Deploy**: Follow the [DEPLOYMENT.md](DEPLOYMENT.md) guide
+
+##  Documentation
+
+- [Deployment Guide](DEPLOYMENT.md)
+- [Project Status](PROJECT_STATUS.md)
+- [Deliverables Summary](DELIVERABLES_SUMMARY.md)
+
+## 🔒 Security Notes
+
+- Frontend only exposes `VITE_*` environment variables
+- Backend CORS configured for localhost:5173 (Vite dev)
+- Secrets should be stored in `/etc/fisamy/*.env` (not in repo)
+- Rotate `CODER_API_TOKEN` before production use

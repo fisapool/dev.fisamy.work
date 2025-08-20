@@ -1,0 +1,5 @@
+version: "3.9"
+
+# Base compose. Per-user services live in docker-compose.override.yml.
+# Run: docker compose up -d <user>
+services: {}

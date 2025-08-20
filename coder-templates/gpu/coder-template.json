@@ -1,0 +1,74 @@
+{
+  "name": "gpu",
+  "display_name": "GPU Environment",
+  "description": "CUDA-enabled development environment for AI workloads and machine learning",
+  "icon": "gpu",
+  "provisioner": "docker",
+  "default_ttl_ms": 7200000,
+  "max_ttl_ms": 86400000,
+  "allow_user_cancel_workspace_jobs": true,
+  "allow_user_autostop": true,
+  "autostop_requirement": {
+    "days_of_week": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+    "start_time": "09:00",
+    "end_time": "17:00",
+    "timezone": "UTC"
+  },
+  "docker": {
+    "image": "nvidia/cuda:12.4.1-runtime-ubuntu22.04",
+    "cpu": 8,
+    "memory": "16GiB",
+    "disk": "20GiB",
+    "gpu": 1,
+    "startup_script": "startup.sh",
+    "startup_script_behavior": "non-blocking",
+    "env": {
+      "NVIDIA_VISIBLE_DEVICES": "all",
+      "NVIDIA_DRIVER_CAPABILITIES": "all"
+    }
+  },
+  "apps": [
+    {
+      "name": "VS Code",
+      "url": "http://localhost:13337",
+      "icon": "vscode",
+      "subdomain": true,
+      "sharing": "owner",
+      "healthcheck": {
+        "url": "http://localhost:13133",
+        "interval": 10,
+        "threshold": 3
+      }
+    },
+    {
+      "name": "Jupyter Lab",
+      "url": "http://localhost:8888",
+      "icon": "jupyter",
+      "subdomain": true,
+      "sharing": "owner",
+      "healthcheck": {
+        "url": "http://localhost:8888",
+        "interval": 15,
+        "threshold": 3
+      }
+    }
+  ],
+  "variables": [
+    {
+      "name": "WORKSPACE_NAME",
+      "description": "Name for the workspace",
+      "type": "string",
+      "required": true,
+      "default_value": "ai-workspace"
+    },
+    {
+      "name": "GPU_COUNT",
+      "description": "Number of GPUs to allocate",
+      "type": "number",
+      "required": false,
+      "default_value": 1,
+      "min": 1,
+      "max": 4
+    }
+  ]
+}

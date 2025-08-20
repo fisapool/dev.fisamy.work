@@ -1,0 +1,35 @@
+{
+  email admin@fisamy.work
+  # Optional: increase header limits if you do remote dev with large requests
+  # servers {
+  #   max_header_bytes 1048576
+  # }
+}
+
+# Duplicate this block per user and change host + port.
+aria.code.fisamy.work {
+  encode gzip
+
+  # Reject uploads > 20MB (tweak as you like)
+  @big body {
+    max_size 20MB
+  }
+  handle @big {
+    respond 413
+  }
+
+  reverse_proxy 127.0.0.1:13001
+
+  # Basic auth (bcrypt). Generate with: htpasswd -nbB aria 'StrongPassword' | sed 's/\$/\$\$/g'
+  basicauth /* {
+    aria $2y$05$replace_me_with_a_real_bcrypt_hash
+  }
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Content-Security-Policy "frame-ancestors 'none';"
+  }
+}

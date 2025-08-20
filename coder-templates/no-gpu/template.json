@@ -1,0 +1,23 @@
+{
+  "image": "ubuntu:22.04",
+  "cpu": 2,
+  "memory": "4GiB",
+  "gpu": 0,
+  "startup_script": "startup.sh",
+  "startup_script_behavior": "non-blocking",
+  "apps": [
+    {
+      "name": "VS Code",
+      "url": "http://localhost:13337",
+      "subdomain": true,
+      "visibility": "owner"
+    }
+  ],
+  "autostop": {
+    "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+    "start": "09:00",
+    "end": "17:00",
+    "timezone": "UTC",
+    "user_toggle": true
+  }
+}

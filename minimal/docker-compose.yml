@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - devnet
+
+networks:
+  devnet:
+    name: devnet
+
+volumes:
+  caddy_data:
+  caddy_config:
+

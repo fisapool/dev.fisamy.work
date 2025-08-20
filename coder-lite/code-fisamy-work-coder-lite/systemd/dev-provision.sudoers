@@ -1,0 +1,21 @@
+# Sudoers configuration for dev-provision helper
+# This allows the provision worker to call the secure host helper script
+
+# Provision worker user (adjust as needed)
+# Default: coder-worker
+coder-worker ALL=(root) NOPASSWD: /opt/coder-lite/scripts/dev-provision *
+
+# Alternative: if running as different user
+# provision-user ALL=(root) NOPASSWD: /opt/coder-lite/scripts/dev-provision *
+
+# Security notes:
+# - Only allows execution of the specific dev-provision script
+# - No password required (NOPASSWD) for automation
+# - Wildcard (*) allows JSON config to be passed
+# - Script runs as root but with controlled operations
+# - All operations are logged via syslog
+
+# To apply this configuration:
+# 1. Copy to /etc/sudoers.d/dev-provision
+# 2. Ensure proper permissions: chmod 440 /etc/sudoers.d/dev-provision
+# 3. Verify syntax: visudo -c -f /etc/sudoers.d/dev-provision

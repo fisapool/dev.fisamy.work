@@ -1,0 +1,48 @@
+{
+  "name": "no-gpu",
+  "display_name": "No GPU Environment",
+  "description": "Basic development environment without GPU for general development work",
+  "icon": "vscode",
+  "provisioner": "docker",
+  "default_ttl_ms": 3600000,
+  "max_ttl_ms": 86400000,
+  "allow_user_cancel_workspace_jobs": true,
+  "allow_user_autostop": true,
+  "autostop_requirement": {
+    "days_of_week": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+    "start_time": "09:00",
+    "end_time": "17:00",
+    "timezone": "UTC"
+  },
+  "docker": {
+    "image": "ubuntu:22.04",
+    "cpu": 2,
+    "memory": "4GiB",
+    "disk": "10GiB",
+    "startup_script": "startup.sh",
+    "startup_script_behavior": "non-blocking"
+  },
+  "apps": [
+    {
+      "name": "VS Code",
+      "url": "http://localhost:13337",
+      "icon": "vscode",
+      "subdomain": true,
+      "sharing": "owner",
+      "healthcheck": {
+        "url": "http://localhost:13133",
+        "interval": 10,
+        "threshold": 3
+      }
+    }
+  ],
+  "variables": [
+    {
+      "name": "WORKSPACE_NAME",
+      "description": "Name for the workspace",
+      "type": "string",
+      "required": true,
+      "default_value": "dev-workspace"
+    }
+  ]
+}

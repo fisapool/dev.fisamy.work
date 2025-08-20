@@ -1,0 +1,631 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Enhanced devctl script with comprehensive features
+# Usage: devctl [command] [user] [options]
+
+# Color codes for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly NC='\033[0m' # No Color
+
+# Configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly CONFIG_FILE="/etc/devctl.conf"
+readonly DATA_ROOT="/srv/devdata"
+readonly COMPOSE_OVERRIDE="docker-compose.override.yml"
+readonly CADDY_FILE_DEFAULT="Caddyfile"
+readonly LOG_FILE="/var/log/devctl.log"
+
+# Default values
+DEFAULT_CPU="2"
+DEFAULT_RAM="4g"
+DEFAULT_DISK="20"
+DEFAULT_PORT_START="13001"
+DEFAULT_IMAGE="ghcr.io/coder/openvscode-server:latest"
+DEFAULT_HEALTHCHECK_INTERVAL="15s"
+DEFAULT_HEALTHCHECK_TIMEOUT="3s"
+DEFAULT_HEALTHCHECK_RETRIES="10"
+DEFAULT_HEALTHCHECK_START_PERIOD="10s"
+
+# Global variables
+VERBOSE=0
+DRY_RUN=0
+FORCE=0
+
+# Logging function
+log() {
+    local level="$1"
+    shift
+    local message="$*"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE" >&2
+}
+
+info() { log "INFO" "$@"; }
+warn() { log "WARN" "$@"; }
+error() { log "ERROR" "$@"; }
+debug() { [[ $VERBOSE -eq 1 ]] && log "DEBUG" "$@"; }
+
+# Color output functions
+print_success() { echo -e "${GREEN}✓${NC} $*"; }
+print_error() { echo -e "${RED}✗${NC} $*"; }
+print_warning() { echo -e "${YELLOW}⚠${NC} $*"; }
+print_info() { echo -e "${BLUE}ℹ${NC} $*"; }
+
+# Load configuration
+load_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        source "$CONFIG_FILE"
+        info "Loaded configuration from $CONFIG_FILE"
+    else
+        debug "No configuration file found at $CONFIG_FILE, using defaults"
+    fi
+}
+
+# Usage information
+usage() {
+    cat <<EOF
+Enhanced Development Environment Controller
+
+Usage: $0 <command> [user] [options]
+
+Commands:
+  create <user>     Create a new development environment
+  update <user>     Update an existing development environment
+  delete <user>     Remove a development environment
+  list              List all development environments
+  status <user>     Show status of a development environment
+  backup <user>     Backup a development environment
+  restore <user>    Restore a development environment
+
+Options for create/update:
+  --cpu N                    CPU limit (default: $DEFAULT_CPU)
+  --ram SIZE                 RAM limit (default: $DEFAULT_RAM)
+  --disk GiB                 Disk quota in GB (default: $DEFAULT_DISK)
+  --port PORT                Specific port (auto-detected if not provided)
+  --domain DOMAIN            Domain for reverse proxy
+  --domain-base BASE         Base domain for subdomain generation
+  --caddy-file PATH          Caddyfile path (default: $CADDY_FILE_DEFAULT)
+  --image-version TAG        Pin specific image version
+  --healthcheck-enable       Enable healthchecks
+  --healthcheck-interval     Healthcheck interval (default: $DEFAULT_HEALTHCHECK_INTERVAL)
+  --healthcheck-timeout      Healthcheck timeout (default: $DEFAULT_HEALTHCHECK_TIMEOUT)
+  --healthcheck-retries      Healthcheck retries (default: $DEFAULT_HEALTHCHECK_RETRIES)
+  --healthcheck-start-period Healthcheck start period (default: $DEFAULT_HEALTHCHECK_START_PERIOD)
+  --no-caddy                 Skip Caddy configuration
+  --no-quota                 Skip quota setup
+  --force                    Force overwrite existing configuration
+  --dry-run                  Show what would be done without executing
+  --verbose                  Enable verbose logging
+
+Global options:
+  --config FILE              Use custom configuration file
+  --help                     Show this help message
+
+Examples:
+  $0 create john --cpu 4 --ram 8g --disk 50 --domain john.dev.example.com
+  $0 create jane --domain-base dev.example.com --image-version 1.92.3
+  $0 update john --ram 16g --healthcheck-enable
+  $0 delete john --purge
+  $0 list
+  $0 status john
+EOF
+}
+
+# Validation functions
+validate_user() {
+    local user="$1"
+    if [[ ! "$user" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+        error "Invalid username: $user (must start with lowercase letter, contain only lowercase letters, numbers, underscores, and hyphens)"
+        return 1
+    fi
+    return 0
+}
+
+validate_cpu() {
+    local cpu="$1"
+    if [[ ! "$cpu" =~ ^[0-9]+(\.[0-9]+)?$ ]] || (( $(echo "$cpu <= 0" | bc -l) )); then
+        error "Invalid CPU value: $cpu (must be positive number)"
+        return 1
+    fi
+    return 0
+}
+
+validate_ram() {
+    local ram="$1"
+    if [[ ! "$ram" =~ ^[0-9]+[kmgKMG]?$ ]]; then
+        error "Invalid RAM value: $ram (must be number followed by k, m, or g)"
+        return 1
+    fi
+    return 0
+}
+
+validate_disk() {
+    local disk="$1"
+    if [[ ! "$disk" =~ ^[0-9]+$ ]] || [[ $disk -le 0 ]]; then
+        error "Invalid disk value: $disk (must be positive integer)"
+        return 1
+    fi
+    return 0
+}
+
+validate_port() {
+    local port="$1"
+    if [[ ! "$port" =~ ^[0-9]+$ ]] || [[ $port -lt 1024 ]] || [[ $port -gt 65535 ]]; then
+        error "Invalid port: $port (must be between 1024 and 65535)"
+        return 1
+    fi
+    return 0
+}
+
+# System checks
+check_dependencies() {
+    local deps=("docker" "docker-compose" "ss" "awk" "sed" "grep")
+    
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" >/dev/null 2>&1; then
+            error "Missing dependency: $dep"
+            return 1
+        fi
+    done
+    
+    # Check for optional dependencies
+    if ! command -v xfs_quota >/dev/null 2>&1; then
+        warn "xfs_quota not found - disk quotas will be disabled"
+    fi
+    
+    if ! command -v systemctl >/dev/null 2>&1; then
+        warn "systemctl not found - Caddy reload will be disabled"
+    fi
+    
+    return 0
+}
+
+# Port management
+find_free_port() {
+    local start_port="${1:-$DEFAULT_PORT_START}"
+    local port=$start_port
+    
+    while ss -ltn | awk '{print $4}' | grep -q ":$port$"; do
+        port=$((port + 1))
+        if [[ $port -gt 65535 ]]; then
+            error "No free ports available starting from $start_port"
+            return 1
+        fi
+    done
+    
+    echo "$port"
+}
+
+# Quota management
+setup_quota() {
+    local user="$1"
+    local disk_gb="$2"
+    
+    if ! command -v xfs_quota >/dev/null 2>&1; then
+        warn "xfs_quota not available, skipping quota setup"
+        return 0
+    fi
+    
+    local user_dir="${DATA_ROOT}/${user}"
+    local project_id
+    
+    # Generate consistent project ID based on username
+    project_id=$((2000 + ($(echo -n "$user" | cksum | awk '{print $1}') % 50000)))
+    
+    debug "Setting up quota for user $user with project ID $project_id"
+    
+    # Add to projects file if not exists
+    if ! grep -q "^${project_id}:${user_dir}$" /etc/projects 2>/dev/null; then
+        echo "${project_id}:${user_dir}" | sudo tee -a /etc/projects >/dev/null
+    fi
+    
+    # Add to projid file if not exists
+    if ! grep -q "^${user}:${project_id}$" /etc/projid 2>/dev/null; then
+        echo "${user}:${project_id}" | sudo tee -a /etc/projid >/dev/null
+    fi
+    
+    # Set up project quota
+    sudo xfs_quota -x -c "project -s $user" "$DATA_ROOT" || {
+        error "Failed to set up project quota for $user"
+        return 1
+    }
+    
+    # Set disk limit
+    sudo xfs_quota -x -c "limit -p bhard=${disk_gb}g $user" "$DATA_ROOT" || {
+        error "Failed to set disk limit for $user"
+        return 1
+    }
+    
+    info "Quota set for $user: ${disk_gb}GB"
+}
+
+# Docker Compose management
+init_compose_override() {
+    if [[ ! -f "$COMPOSE_OVERRIDE" ]]; then
+        cat > "$COMPOSE_OVERRIDE" <<'EOF'
+version: "3.9"
+
+services:
+EOF
+        info "Created new docker-compose.override.yml"
+    elif ! grep -qE '^services:\s*$' "$COMPOSE_OVERRIDE"; then
+        echo "" >> "$COMPOSE_OVERRIDE"
+        echo "services:" >> "$COMPOSE_OVERRIDE"
+        info "Added services section to docker-compose.override.yml"
+    fi
+}
+
+generate_service_block() {
+    local user="$1"
+    local port="$2"
+    local cpu="$3"
+    local ram="$4"
+    local image="${5:-$DEFAULT_IMAGE}"
+    local enable_healthcheck="${6:-0}"
+    
+    cat <<EOF
+
+  # --- $user ---
+  $user:
+    image: $image
+    container_name: dev-$user
+    environment:
+      - TZ=\${TZ:-Asia/Kuala_Lumpur}
+    ports:
+      - "127.0.0.1:$port:3000"
+    volumes:
+      - ${DATA_ROOT}/${user}:/home/openvscode
+    restart: unless-stopped
+    mem_limit: "$ram"
+    memswap_limit: "$ram"
+    cpus: "$cpu"
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+      nproc: 1024
+    labels:
+      - fisamy.role=ovscode
+      - fisamy.user=$user
+EOF
+
+    if [[ "$enable_healthcheck" == "1" ]]; then
+        cat <<EOF
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': </dev/tcp/127.0.0.1/3000' || exit 1"]
+      interval: ${DEFAULT_HEALTHCHECK_INTERVAL}
+      timeout: ${DEFAULT_HEALTHCHECK_TIMEOUT}
+      retries: ${DEFAULT_HEALTHCHECK_RETRIES}
+      start_period: ${DEFAULT_HEALTHCHECK_START_PERIOD}
+EOF
+    fi
+}
+
+# Caddy management
+backup_caddy_file() {
+    local caddy_file="$1"
+    local backup_file="${caddy_file}.backup.$(date +%Y%m%d_%H%M%S)"
+    
+    if [[ -f "$caddy_file" ]]; then
+        cp "$caddy_file" "$backup_file"
+        info "Backed up Caddyfile to $backup_file"
+        echo "$backup_file"
+    fi
+}
+
+validate_caddy_config() {
+    local caddy_file="$1"
+    
+    if ! command -v caddy >/dev/null 2>&1; then
+        warn "Caddy binary not found, skipping validation"
+        return 0
+    fi
+    
+    if caddy validate --config "$caddy_file"; then
+        debug "Caddy configuration is valid"
+        return 0
+    else
+        error "Caddy configuration validation failed"
+        return 1
+    fi
+}
+
+add_caddy_site() {
+    local user="$1"
+    local domain="$2"
+    local port="$3"
+    local caddy_file="${4:-$CADDY_FILE_DEFAULT}"
+    
+    # Create Caddyfile if it doesn't exist
+    if [[ ! -f "$caddy_file" ]]; then
+        cat > "$caddy_file" <<'EOF'
+{
+  email admin@example.com
+}
+EOF
+        info "Created new Caddyfile at $caddy_file"
+    fi
+    
+    # Check if domain already exists
+    if grep -qE "^${domain}\s*\{" "$caddy_file"; then
+        if [[ $FORCE -eq 0 ]]; then
+            warn "Domain $domain already exists in $caddy_file (use --force to overwrite)"
+            return 1
+        else
+            # Remove existing block
+            sed -i "/^${domain}\s*{/,/^}/d" "$caddy_file"
+            info "Removed existing configuration for $domain"
+        fi
+    fi
+    
+    # Add new site block
+    cat >> "$caddy_file" <<EOF
+
+${domain} {
+  encode gzip
+  
+  # Reject uploads > 20MB
+  @big body {
+    max_size 20MB
+  }
+  handle @big {
+    respond 413
+  }
+
+  reverse_proxy 127.0.0.1:${port}
+
+  # Basic auth (bcrypt). Generate with: htpasswd -nbB ${user} 'StrongPassword' | sed 's/\$/\$\$/g'
+  # basicauth /* {
+  #   ${user} \$2y\$05\$replace_me_with_a_real_bcrypt_hash
+  # }
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Content-Security-Policy "frame-ancestors 'none';"
+  }
+}
+EOF
+    
+    info "Added Caddy site for $domain -> 127.0.0.1:$port"
+}
+
+reload_caddy() {
+    local caddy_file="$1"
+    
+    if ! command -v systemctl >/dev/null 2>&1; then
+        warn "systemctl not available, skipping Caddy reload"
+        return 0
+    fi
+    
+    if ! systemctl is-active --quiet caddy; then
+        warn "Caddy service is not running"
+        return 1
+    fi
+    
+    if systemctl reload caddy; then
+        info "Caddy reloaded successfully"
+        return 0
+    else
+        error "Failed to reload Caddy"
+        return 1
+    fi
+}
+
+# User management functions
+create_user() {
+    local user="$1"
+    shift
+    
+    local cpu="$DEFAULT_CPU"
+    local ram="$DEFAULT_RAM"
+    local disk="$DEFAULT_DISK"
+    local port=""
+    local domain=""
+    local domain_base=""
+    local caddy_file="$CADDY_FILE_DEFAULT"
+    local image_version=""
+    local enable_healthcheck=0
+    local no_caddy=0
+    local no_quota=0
+    local reload_caddy=0
+    
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --cpu) cpu="$2"; shift 2 ;;
+            --ram) ram="$2"; shift 2 ;;
+            --disk) disk="$2"; shift 2 ;;
+            --port) port="$2"; shift 2 ;;
+            --domain) domain="$2"; shift 2 ;;
+            --domain-base) domain_base="$2"; shift 2 ;;
+            --caddy-file) caddy_file="$2"; shift 2 ;;
+            --image-version) image_version="$2"; shift 2 ;;
+            --healthcheck-enable) enable_healthcheck=1; shift ;;
+            --no-caddy) no_caddy=1; shift ;;
+            --no-quota) no_quota=1; shift ;;
+            --reload-caddy) reload_caddy=1; shift ;;
+            *) error "Unknown option: $1"; usage; return 1 ;;
+        esac
+    done
+    
+    # Validate inputs
+    validate_user "$user" || return 1
+    validate_cpu "$cpu" || return 1
+    validate_ram "$ram" || return 1
+    validate_disk "$disk" || return 1
+    
+    if [[ -n "$port" ]]; then
+        validate_port "$port" || return 1
+    fi
+    
+    # Auto-detect port if not provided
+    if [[ -z "$port" ]]; then
+        port=$(find_free_port)
+        info "Auto-detected free port: $port"
+    fi
+    
+    # Generate domain if base provided
+    if [[ -n "$domain_base" && -z "$domain" ]]; then
+        domain="${user}.${domain_base}"
+        info "Generated domain: $domain"
+    fi
+    
+    # Check if user already exists
+    if grep -qE "^\s{2}${user}:\s*$" "$COMPOSE_OVERRIDE" 2>/dev/null; then
+        if [[ $FORCE -eq 0 ]]; then
+            error "User $user already exists (use --force to overwrite)"
+            return 1
+        else
+            info "Overwriting existing configuration for $user"
+        fi
+    fi
+    
+    # Create user directory
+    if [[ $DRY_RUN -eq 0 ]]; then
+        sudo mkdir -p "${DATA_ROOT}/${user}"
+        sudo chown root:root "${DATA_ROOT}/${user}"
+        sudo chmod 755 "${DATA_ROOT}/${user}"
+        info "Created user directory: ${DATA_ROOT}/${user}"
+    else
+        info "[DRY RUN] Would create directory: ${DATA_ROOT}/${user}"
+    fi
+    
+    # Set up quota
+    if [[ $no_quota -eq 0 && $DRY_RUN -eq 0 ]]; then
+        setup_quota "$user" "$disk"
+    elif [[ $DRY_RUN -eq 1 ]]; then
+        info "[DRY RUN] Would set quota: ${disk}GB for $user"
+    fi
+    
+    # Initialize compose override
+    if [[ $DRY_RUN -eq 0 ]]; then
+        init_compose_override
+    fi
+    
+    # Generate service block
+    local image="${image_version:-$DEFAULT_IMAGE}"
+    if [[ -n "$image_version" ]]; then
+        image="${DEFAULT_IMAGE%:*}:$image_version"
+    fi
+    
+    local service_block
+    service_block=$(generate_service_block "$user" "$port" "$cpu" "$ram" "$image" "$enable_healthcheck")
+    
+    # Add to compose override
+    if [[ $DRY_RUN -eq 0 ]]; then
+        # Remove existing service if it exists
+        if grep -qE "^\s{2}${user}:\s*$" "$COMPOSE_OVERRIDE"; then
+            sed -i "/^\s{2}${user}:/,/^\s\{2\}[a-zA-Z]/ {/^\s{2}${user}:/,/^\s\{2\}[a-zA-Z]/d}" "$COMPOSE_OVERRIDE"
+        fi
+        
+        echo "$service_block" >> "$COMPOSE_OVERRIDE"
+        info "Added service for $user to docker-compose.override.yml"
+    else
+        info "[DRY RUN] Would add service block for $user"
+    fi
+    
+    # Configure Caddy
+    if [[ $no_caddy -eq 0 && -n "$domain" ]]; then
+        if [[ $DRY_RUN -eq 0 ]]; then
+            local backup_file
+            backup_file=$(backup_caddy_file "$caddy_file")
+            
+            if add_caddy_site "$user" "$domain" "$port" "$caddy_file"; then
+                if validate_caddy_config "$caddy_file"; then
+                    if [[ $reload_caddy -eq 1 ]]; then
+                        reload_caddy "$caddy_file"
+                    fi
+                else
+                    error "Caddy configuration invalid, restoring from backup"
+                    cp "$backup_file" "$caddy_file"
+                    return 1
+                fi
+            else
+                error "Failed to add Caddy site"
+                return 1
+            fi
+        else
+            info "[DRY RUN] Would configure Caddy for domain: $domain"
+        fi
+    fi
+    
+    print_success "User '$user' created successfully"
+    print_info "  CPU: $cpu cores"
+    print_info "  RAM: $ram"
+    print_info "  Disk: ${disk}GB"
+    print_info "  Port: $port"
+    [[ -n "$domain" ]] && print_info "  Domain: $domain"
+    print_info "Start with: docker compose up -d $user"
+}
+
+# Main execution
+main() {
+    load_config
+    
+    if [[ $# -eq 0 ]]; then
+        usage
+        exit 1
+    fi
+    
+    local command="$1"
+    shift
+    
+    case "$command" in
+        create)
+            [[ $# -eq 0 ]] && { error "Username required"; usage; exit 1; }
+            local user="$1"
+            shift
+            create_user "$user" "$@"
+            ;;
+        update)
+            [[ $# -eq 0 ]] && { error "Username required"; usage; exit 1; }
+            local user="$1"
+            shift
+            create_user "$user" "$@"  # Reuse create with force
+            ;;
+        delete)
+            [[ $# -eq 0 ]] && { error "Username required"; usage; exit 1; }
+            # TODO: Implement delete
+            error "Delete command not implemented yet"
+            ;;
+        list)
+            # TODO: Implement list
+            error "List command not implemented yet"
+            ;;
+        status)
+            [[ $# -eq 0 ]] && { error "Username required"; usage; exit 1; }
+            # TODO: Implement status
+            error "Status command not implemented yet"
+            ;;
+        backup)
+            [[ $# -eq 0 ]] && { error "Username required"; usage; exit 1; }
+            # TODO: Implement backup
+            error "Backup command not implemented yet"
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            error "Unknown command: $command"
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+# Check dependencies before running
+if ! check_dependencies; then
+    exit 1
+fi
+
+# Run main function
+main "$@"

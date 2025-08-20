@@ -1,0 +1,12 @@
+{
+  email bookmyrumah@gmail.com
+  # Optional: reduce noisy logs
+  # admin off
+}
+
+import /etc/caddy/sites/*.caddy
+
+# Default landing page for base domain if desired
+# devbox.example.com {
+#   respond "OpenVSCode Server Gateway" 200
+# }

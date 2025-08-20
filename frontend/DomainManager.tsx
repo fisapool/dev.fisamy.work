@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './DomainManager.css';
+import { safeLog, safeStringify, hasCircularReferences } from './src/utils/safeJson';
 
 interface Domain {
   id: string;
@@ -46,6 +47,7 @@ const DomainManager: React.FC<DomainManagerProps> = ({
         setError('Failed to fetch domains');
       }
     } catch (err) {
+      safeLog(err, 'Error fetching domains:');
       setError('Error fetching domains');
     }
   };
@@ -83,6 +85,7 @@ const DomainManager: React.FC<DomainManagerProps> = ({
         setError(errorData.error || 'Failed to add domain');
       }
     } catch (err) {
+      safeLog(err, 'Error adding domain:');
       setError('Error adding domain');
     } finally {
       setLoading(false);
@@ -104,6 +107,7 @@ const DomainManager: React.FC<DomainManagerProps> = ({
         setError(errorData.error || 'Verification failed');
       }
     } catch (err) {
+      safeLog(err, 'Error verifying domain:');
       setError('Error verifying domain');
     }
   };
@@ -124,6 +128,7 @@ const DomainManager: React.FC<DomainManagerProps> = ({
         setError('Failed to delete domain');
       }
     } catch (err) {
+      safeLog(err, 'Error deleting domain:');
       setError('Error deleting domain');
     }
   };

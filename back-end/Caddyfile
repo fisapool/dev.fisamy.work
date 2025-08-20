@@ -1,0 +1,59 @@
+dev.fisamy.work, test.coder.fisamy.work {
+    # Automatic HTTPS with Let's Encrypt
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
+    # BFF API endpoints - MUST COME FIRST!
+    handle /api/* {
+        reverse_proxy localhost:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Frontend static files (React app) - COMES AFTER API
+    root * /var/www/fisamy-frontend
+    try_files {path} /index.html
+
+# Security headers
+header {
+    X-Frame-Options "SAMEORIGIN"
+    X-Content-Type-Options "nosniff"
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Access-Control-Allow-Origin "http://localhost:5173"
+}
+
+    # Gzip compression
+    encode gzip
+}
+
+# Production Coder instance
+coder.fisamy.work {
+    # Automatic HTTPS with Let's Encrypt
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
+    # Proxy to Coder service (adjust port as needed)
+    reverse_proxy localhost:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Gzip compression
+    encode gzip
+}

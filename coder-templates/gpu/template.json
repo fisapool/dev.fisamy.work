@@ -1,0 +1,33 @@
+{
+  "image": "nvidia/cuda:12.4.1-runtime-ubuntu22.04",
+  "cpu": 8,
+  "memory": "16GiB",
+  "gpu": 1,
+  "startup_script": "startup.sh",
+  "startup_script_behavior": "non-blocking",
+  "env": {
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "all"
+  },
+  "apps": [
+    {
+      "name": "VS Code",
+      "url": "http://localhost:13337",
+      "subdomain": true,
+      "visibility": "owner"
+    },
+    {
+      "name": "Jupyter Lab",
+      "url": "http://localhost:8888",
+      "subdomain": true,
+      "visibility": "owner"
+    }
+  ],
+  "autostop": {
+    "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+    "start": "09:00",
+    "end": "17:00",
+    "timezone": "UTC",
+    "user_toggle": true
+  }
+}

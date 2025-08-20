@@ -1,0 +1,239 @@
+# Production configuration for Coder-lite provision system
+
+# System paths
+coder_lite_path: "/opt/coder-lite"
+data_root: "/srv/devdata"
+caddy_file: "/opt/coder-lite/Caddyfile"
+compose_override: "/opt/coder-lite/docker-compose.override.yml"
+
+# Network configuration
+domain_base: "code.fisamy.work"
+start_port: 13001
+max_port: 65535
+network_name: "devnet"
+
+# Timezone
+timezone: "Asia/Kuala_Lumpur"
+
+# Plan matrix - defines resource limits for each SKU
+plans:
+  DEV-BASIC-1M:
+    cpu: "2.0"
+    ram: "4g"
+    disk: 20
+    idle_timeout: 45
+    gpu: false
+    description: "Basic development environment"
+    
+  DEV-PLUS-1M:
+    cpu: "4.0"
+    ram: "8g"
+    disk: 40
+    idle_timeout: 120
+    gpu: false
+    description: "Enhanced development environment"
+    
+  DEV-GPU-1M:
+    cpu: "6.0"
+    ram: "16g"
+    disk: 60
+    idle_timeout: 45
+    gpu: true
+    description: "GPU-enabled development environment"
+
+# Docker configuration
+docker:
+  image_version: "1.92.3"  # Pin version for reproducibility
+  healthcheck_enable: true
+  restart_policy: "unless-stopped"
+  
+  # Resource limits defaults
+  default_limits:
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+      nproc: 1024
+
+# Caddy configuration
+caddy:
+  upload_limit: "20MB"
+  security_headers:
+    hsts_max_age: 31536000
+    csp_frame_ancestors: "'none'"
+  
+  # Basic auth settings
+  basic_auth:
+    bcrypt_rounds: 12
+    password_length: 24
+
+# XFS quota configuration
+xfs:
+  enable: true
+  project_id_start: 2000
+  project_id_range: 50000
+
+# Health check configuration
+healthcheck:
+  timeout: 120  # seconds
+  interval: 5   # seconds
+  max_retries: 10
+  start_period: 10
+
+# Redis configuration
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: null
+  lock_ttl_ms: 300000  # 5 minutes
+
+# Database configuration
+database:
+  url: "postgresql://coder:password@localhost/coder_lite"
+  pool_size: 20
+  max_overflow: 30
+  pool_timeout: 30
+
+# Metrics and monitoring
+metrics:
+  retention_hours: 24
+  cleanup_interval: 3600  # 1 hour
+  prometheus_endpoint: "/metrics"
+  
+  # Alerting thresholds
+  alerts:
+    provision_failure_rate: 0.05  # 5%
+    provision_timeout_ms: 300000  # 5 minutes
+    max_retries: 3
+
+# Notification configuration
+notifications:
+  email:
+    enabled: true
+    smtp_host: "localhost"
+    smtp_port: 587
+    smtp_user: "noreply@code.fisamy.work"
+    smtp_password: null  # Set via environment
+    
+  slack:
+    enabled: false
+    webhook_url: null  # Set via environment
+    
+  whatsapp:
+    enabled: false
+    api_key: null  # Set via environment
+
+# Security configuration
+security:
+  # Webhook signature verification
+  webhook_signature:
+    enabled: true
+    algorithms: ["HMAC-SHA256"]
+    replay_window_minutes: 5
+    
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+    burst_size: 10
+    
+  # IP allowlist (optional)
+  allowed_ips: []
+  
+  # TLS configuration
+  tls:
+    min_version: "1.2"
+    cipher_suites: ["TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"]
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # File logging
+  file:
+    enabled: true
+    path: "/var/log/coder-lite/provision.log"
+    max_size: "100MB"
+    backup_count: 5
+    
+  # Syslog
+  syslog:
+    enabled: true
+    facility: "local0"
+
+# Worker configuration
+worker:
+  # Number of worker processes
+  processes: 2
+  
+  # Queue configuration
+  queue:
+    name: "provision_jobs"
+    max_retries: 3
+    retry_delay: 300  # 5 minutes
+    
+  # Job timeout
+  job_timeout: 600  # 10 minutes
+  
+  # Batch processing
+  batch_size: 10
+  batch_timeout: 30  # seconds
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention_days: 30
+  
+  # Backup locations
+  locations:
+    - "/srv/devdata"
+    - "/opt/coder-lite/Caddyfile"
+    - "/opt/coder-lite/docker-compose.override.yml"
+    
+  # Exclude patterns
+  exclude:
+    - "*.tmp"
+    - "*.log"
+    - "node_modules"
+
+# Maintenance configuration
+maintenance:
+  # Idle reaper settings
+  idle_reaper:
+    enabled: true
+    check_interval: 300  # 5 minutes
+    idle_threshold_minutes: 45
+    cpu_threshold_percent: 1.0
+    network_threshold_bps: 2048
+    
+  # Cleanup settings
+  cleanup:
+    enabled: true
+    schedule: "0 3 * * *"  # Daily at 3 AM
+    remove_failed_workspaces_after_days: 7
+    remove_old_logs_after_days: 30
+
+# Environment-specific overrides
+# These can be set via environment variables
+environment:
+  # Override database URL
+  DATABASE_URL: null
+  
+  # Override Redis connection
+  REDIS_URL: null
+  
+  # Override domain base
+  DOMAIN_BASE: null
+  
+  # Override SMTP credentials
+  SMTP_PASSWORD: null
+  
+  # Override Slack webhook
+  SLACK_WEBHOOK_URL: null
+  
+  # Override WhatsApp API key
+  WHATSAPP_API_KEY: null

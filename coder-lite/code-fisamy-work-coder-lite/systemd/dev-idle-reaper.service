@@ -1,0 +1,11 @@
+[Unit]
+Description=Stop idle OpenVSCode containers
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=THRESHOLD_MINUTES=45
+Environment=CPU_PCT_MAX=1.0
+Environment=RX_TX_BPS_MAX=2048
+ExecStart=/usr/local/sbin/dev-idle-reaper.sh

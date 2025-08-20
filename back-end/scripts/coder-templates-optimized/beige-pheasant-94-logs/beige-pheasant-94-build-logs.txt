@@ -1,0 +1,64 @@
+
+Initializing the backend...
+Initializing modules...
+Downloading registry.coder.com/coder/code-server/coder 1.3.1 for code-server...
+- code-server in .terraform/modules/code-server
+Downloading registry.coder.com/coder/jetbrains-gateway/coder 1.2.2 for jetbrains_gateway...
+- jetbrains_gateway in .terraform/modules/jetbrains_gateway
+Initializing provider plugins...
+- Reusing previous version of coder/coder from the dependency lock file
+- Reusing previous version of kreuzwerker/docker from the dependency lock file
+- Reusing previous version of hashicorp/http from the dependency lock file
+- Using coder/coder v2.10.0 from the shared cache directory
+- Using kreuzwerker/docker v3.6.2 from the shared cache directory
+- Using hashicorp/http v3.5.0 from the shared cache directory
+Terraform has been successfully initialized!
+You may now begin working with Terraform. Try running "terraform plan" to see
+any changes that are required for your infrastructure. All Terraform commands
+should now work.
+If you ever set or change modules or backend configuration for Terraform,
+rerun this command to reinitialize your working directory. If you forget, other
+commands will detect it and remind you to do so if necessary.
+Terraform 1.12.2
+data.coder_workspace.me: Refreshing...
+data.coder_provisioner.me: Refreshing...
+data.coder_workspace_owner.me: Refreshing...
+data.coder_provisioner.me: Refresh complete after 0s [id=adf81851-cb9e-48f7-b8aa-0f8af1ef4cde]
+data.coder_workspace_owner.me: Refresh complete after 0s [id=e8d53f37-6897-47af-8875-b85eb137074a]
+data.coder_workspace.me: Refresh complete after 0s [id=08db57e4-8f4c-4978-b2ba-042c791b3e60]
+module.jetbrains_gateway[0].data.coder_workspace.me: Refreshing...
+module.jetbrains_gateway[0].data.coder_workspace_owner.me: Refreshing...
+module.jetbrains_gateway[0].data.coder_workspace.me: Refresh complete after 0s [id=08db57e4-8f4c-4978-b2ba-042c791b3e60]
+module.jetbrains_gateway[0].data.coder_workspace_owner.me: Refresh complete after 0s [id=e8d53f37-6897-47af-8875-b85eb137074a]
+module.jetbrains_gateway[0].data.coder_parameter.jetbrains_ide: Refreshing...
+module.jetbrains_gateway[0].data.coder_parameter.jetbrains_ide: Refresh complete after 0s [id=822c57c7-a34a-42f1-8dff-7b52f06b0625]
+docker_volume.home_volume: Plan to create
+coder_agent.main: Plan to create
+module.jetbrains_gateway[0].coder_app.gateway: Plan to create
+module.code-server[0].coder_app.code-server: Plan to create
+docker_container.workspace[0]: Plan to create
+module.code-server[0].coder_script.code-server: Plan to create
+Plan: 6 to add, 0 to change, 0 to destroy.
+
+Terraform 1.12.2
+docker_volume.home_volume: Plan to create
+coder_agent.main: Plan to create
+module.jetbrains_gateway[0].coder_app.gateway: Plan to create
+module.code-server[0].coder_app.code-server: Plan to create
+docker_container.workspace[0]: Plan to create
+module.code-server[0].coder_script.code-server: Plan to create
+coder_agent.main: Creating...
+docker_volume.home_volume: Creating...
+coder_agent.main: Creation complete after 0s [id=098a0df5-2e3d-4d63-8f16-38f0f0fb3056]
+module.jetbrains_gateway[0].coder_app.gateway: Creating...
+module.code-server[0].coder_app.code-server: Creating...
+module.code-server[0].coder_script.code-server: Creating...
+module.jetbrains_gateway[0].coder_app.gateway: Creation complete after 0s [id=3f1b602e-cfee-42ca-b859-d742709da1ce]
+module.code-server[0].coder_app.code-server: Creation complete after 0s [id=fd60af39-35a5-49ab-8035-1480f95e1bd4]
+module.code-server[0].coder_script.code-server: Creation complete after 0s [id=c573b8a5-b698-4794-89c2-c407676c3d7c]
+docker_volume.home_volume: Creation complete after 0s [id=coder-08db57e4-8f4c-4978-b2ba-042c791b3e60-home]
+docker_container.workspace[0]: Creating...
+docker_container.workspace[0]: Still creating... [10s elapsed]
+docker_container.workspace[0]: Creation complete after 16s [id=c4c209087e2e1ca0aa790bf951909e9af2ba6bc29c33a6af5f63e936df4347a6]
+Apply complete! Resources: 6 added, 0 changed, 0 destroyed.
+Outputs: 0

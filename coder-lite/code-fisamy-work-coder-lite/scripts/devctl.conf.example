@@ -1,0 +1,60 @@
+# Enhanced Development Environment Controller Configuration
+# Copy this file to /etc/devctl.conf and customize as needed
+
+# Default resource limits
+DEFAULT_CPU="2"
+DEFAULT_RAM="4g"
+DEFAULT_DISK="20"
+DEFAULT_PORT_START="13001"
+
+# Image configuration
+DEFAULT_IMAGE="ghcr.io/coder/openvscode-server:latest"
+
+# Health check defaults
+DEFAULT_HEALTHCHECK_INTERVAL="15s"
+DEFAULT_HEALTHCHECK_TIMEOUT="3s"
+DEFAULT_HEALTHCHECK_RETRIES="10"
+DEFAULT_HEALTHCHECK_START_PERIOD="10s"
+
+# Caddy configuration
+CADDY_FILE_DEFAULT="/etc/caddy/Caddyfile"
+CADDY_EMAIL="admin@example.com"
+
+# Data directory
+DATA_ROOT="/srv/devdata"
+COMPOSE_OVERRIDE="docker-compose.override.yml"
+
+# Logging
+LOG_FILE="/var/log/devctl.log"
+LOG_LEVEL="INFO"  # DEBUG, INFO, WARN, ERROR
+
+# Network configuration
+DEFAULT_NETWORK="dev-network"
+DEFAULT_SUBNET="172.20.0.0/16"
+DEFAULT_GATEWAY="172.20.0.1"
+
+# Security settings
+SECURITY_OPTS="no-new-privileges:true"
+CAP_DROP="ALL"
+CAP_ADD="CHOWN,SETGID,SETUID,DAC_OVERRIDE"
+
+# Environment variables
+DEFAULT_TZ="Asia/Kuala_Lumpur"
+DEFAULT_NODE_ENV="development"
+DEFAULT_GIT_AUTHOR_NAME="Developer"
+DEFAULT_GIT_AUTHOR_EMAIL="dev@example.com"
+
+# Monitoring
+MONITORING_ENABLED="true"
+MONITORING_PORT="3000"
+MONITORING_PATH="/healthz"
+
+# Backup settings
+BACKUP_RETENTION_DAYS="30"
+BACKUP_LOCATION="/var/backups/devctl"
+
+# Advanced settings
+ENABLE_XFS_QUOTA="true"
+ENABLE_CADDY_RELOAD="true"
+ENABLE_HEALTHCHECKS="true"
+ENABLE_SECURITY_LABELS="true"

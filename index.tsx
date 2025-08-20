@@ -4,6 +4,7 @@
 */
 import React, { useMemo, useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
+import { safeLog } from "./utils/safeJson";
 
 // VS Code Hosting – Pricing + Comparison + FAQ
 // Drop-in component for a Landing/Pricing page.

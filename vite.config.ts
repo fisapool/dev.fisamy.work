@@ -1,12 +1,12 @@
-import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
+<<<<<<< Current (Your changes)
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || ''),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || ''),
         // Expose VITE_* environment variables to the client
         'import.meta.env.VITE_APP_NAME': JSON.stringify(env.VITE_APP_NAME || 'code.fisamy.work'),
         'import.meta.env.VITE_APP_VERSION': JSON.stringify(env.VITE_APP_VERSION || '1.0.0'),
@@ -28,3 +28,24 @@ export default defineConfig(({ mode }) => {
       }
     };
 });
+<<<<<<< Current (Your changes)
+=======
+=======
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+  },
+  server: {
+    port: 3000,
+    open: true,
+  },
+})
+>>>>>>> Incoming (Background Agent changes)
+>>>>>>> Incoming (Background Agent changes)

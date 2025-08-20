@@ -1,0 +1,204 @@
+version: "3.9"
+
+# Enhanced Docker Compose Override Configuration
+# Copy this file to docker-compose.override.yml and customize per user
+
+# Configuration Guide:
+# 1. Image Version Pinning: Uncomment and set specific version to avoid drift
+# 2. Healthchecks: Enable for better container monitoring
+# 3. Resource Limits: Adjust based on user requirements
+# 4. Environment Variables: Add custom environment variables as needed
+# 5. Networks: Create custom networks for isolation
+# 6. Volumes: Add persistent volumes for data retention
+
+services:
+  # Template service - duplicate and customize for each user
+  template-user:
+    # Pin version to avoid drift
+    # Available versions: https://github.com/coder/code-server/releases
+    # image: ghcr.io/coder/openvscode-server:1.92.3
+    # image: ghcr.io/coder/openvscode-server:1.93.1
+    image: ghcr.io/coder/openvscode-server:latest
+    
+    container_name: dev-template-user
+    hostname: template-user
+    
+    environment:
+      # Timezone configuration
+      - TZ=${TZ:-Asia/Kuala_Lumpur}
+      
+      # VS Code settings
+      - VSCODE_PROXY_URI={VSCODE_PROXY_URI:-}
+      - VSCODE_SERVER_OPTIONS=--disable-telemetry --disable-workspace-trust
+      - PASSWORD=${PASSWORD:-}  # Optional password for web access
+      
+      # Git configuration (optional)
+      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-Developer}
+      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-dev@example.com}
+      
+      # Node.js/npm configuration (optional)
+      - NODE_ENV=${NODE_ENV:-development}
+      - NPM_CONFIG_CACHE=/home/openvscode/.npm
+      
+      # Custom environment variables
+      - CUSTOM_ENV_VAR=${CUSTOM_ENV_VAR:-default_value}
+
+    ports:
+      # Format: "HOST_IP:HOST_PORT:CONTAINER_PORT"
+      # Use 127.0.0.1 for localhost-only access
+      # Use 0.0.0.0 for external access (not recommended)
+      - "127.0.0.1:13001:3000"
+
+    volumes:
+      # User workspace
+      - /srv/devdata/template-user:/home/openvscode
+      
+      # Optional: Mount additional volumes
+      # - ./projects:/home/openvscode/projects
+      # - ~/.ssh:/home/openvscode/.ssh:ro
+      # - ~/.gitconfig:/home/openvscode/.gitconfig:ro
+      
+      # Optional: Mount Docker socket for Docker-in-Docker
+      # - /var/run/docker.sock:/var/run/docker.sock
+
+    restart: unless-stopped
+    
+    # Healthcheck configuration
+    # Enable for production environments
+    healthcheck:
+      # Test container health by checking if port is accessible
+      test: ["CMD-SHELL", "bash -c ': </dev/tcp/127.0.0.1/3000' || exit 1"]
+      
+      # Alternative healthcheck using curl (if available)
+      # test: ["CMD-SHELL", "curl -f http://localhost:3000/healthz || exit 1"]
+      
+      # Alternative healthcheck using wget (if available)
+      # test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/healthz || exit 1"]
+      
+      interval: 15s      # How often to run healthcheck
+      timeout: 3s        # How long to wait for response
+      retries: 10        # How many failures before unhealthy
+      start_period: 10s  # Grace period for container startup
+
+    # Resource limits
+    # Adjust based on user requirements and available system resources
+    
+    # Memory limits
+    mem_limit: "4g"                    # Hard memory limit
+    memswap_limit: "4g"                 # Swap limit (set equal to mem_limit to disable swap)
+    mem_reservation: "2g"               # Soft memory limit (minimum guaranteed)
+    
+    # CPU limits
+    cpus: "2.0"                         # Maximum CPU cores (can be fractional)
+    cpu_shares: 1024                    # CPU shares (relative weight)
+    cpu_quota: 200000                 # CPU quota in microseconds
+    cpu_period: 100000                # CPU period in microseconds
+    
+    # Process limits
+    pids_limit: 512                   # Maximum number of processes
+    
+    # File descriptor limits
+    ulimits:
+      nofile:
+        soft: 8192                    # Soft limit for open files
+        hard: 8192                    # Hard limit for open files
+      nproc: 1024                     # Maximum number of processes
+      memlock:
+        soft: -1                      # Disable memory locking
+        hard: -1
+      fsize:
+        soft: -1                      # Disable file size limit
+        hard: -1
+
+    # Security settings
+    security_opt:
+      - no-new-privileges:true         # Prevent privilege escalation
+    
+    # User and group (run as non-root)
+    user: "1000:1000"
+    
+    # Capabilities (drop all and add only required ones)
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN                        # Allow chown
+      - SETGID                       # Allow setgid
+      - SETUID                       # Allow setuid
+      - DAC_OVERRIDE                 # Allow file permission override
+    
+    # Read-only root filesystem
+    read_only: false
+    
+    # Temporary filesystem for /tmp and /var/tmp
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=1g
+      - /var/tmp:rw,nosuid,nodev,noexec,size=256m
+
+    # GPU support (uncomment if needed)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu, utility]
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+        labels: "fisamy.user,template-user"
+    
+    # Labels for identification and management
+    labels:
+      - fisamy.role=ovscode
+      - fisamy.user=template-user
+      - fisamy.created=2024-01-01T00:00:00Z
+      - fisamy.cpu=2
+      - fisamy.ram=4g
+      - fisamy.disk=20g
+      
+      # Custom labels for monitoring
+      - monitoring.enabled=true
+      - monitoring.port=3000
+      - monitoring.path=/healthz
+
+    # Networks (create custom networks for isolation)
+    networks:
+      - dev-network
+      # - traefik-network  # For Traefik integration
+
+    # DNS configuration
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    dns_search:
+      - example.com
+
+# Network definitions
+networks:
+  dev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+    labels:
+      - fisamy.network=dev-network
+
+# Volume definitions
+volumes:
+  template-user-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /srv/devdata/template-user
+  template-user-cache:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1g

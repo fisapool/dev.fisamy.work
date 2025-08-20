@@ -1,0 +1,494 @@
+#!/usr/bin/env python3
+"""
+Secure host helper for workspace provisioning
+This script is called by the provision worker via sudo to perform privileged operations
+"""
+
+import os
+import sys
+import json
+import logging
+import subprocess
+import tempfile
+import shutil
+from pathlib import Path
+from typing import Dict, Any
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class DevProvisionHelper:
+    """Secure helper for workspace provisioning operations"""
+    
+    def __init__(self):
+        self.coder_lite_path = "/opt/coder-lite"
+        self.data_root = "/srv/devdata"
+        self.compose_override = os.path.join(self.coder_lite_path, "docker-compose.override.yml")
+        self.caddy_file = "/opt/coder-lite/Caddyfile"
+        
+        # Validate paths
+        self._validate_paths()
+    
+    def _validate_paths(self):
+        """Validate required paths exist and are accessible"""
+        required_paths = [
+            self.coder_lite_path,
+            self.data_root,
+            self.compose_override,
+            self.caddy_file
+        ]
+        
+        for path in required_paths:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"Required path not found: {path}")
+    
+    def provision_workspace(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Provision a new workspace with all security measures
+        
+        Args:
+            config: Workspace configuration
+            
+        Returns:
+            Result dictionary
+        """
+        try:
+            username = config['username']
+            plan_config = config['plan_config']
+            port = config['port']
+            bcrypt_hash = config['bcrypt_hash']
+            
+            logger.info(f"Provisioning workspace for {username}")
+            
+            # 1. Create data directory with proper permissions
+            data_dir = os.path.join(self.data_root, username)
+            self._create_data_directory(data_dir)
+            
+            # 2. Apply XFS quota if available
+            quota_result = self._apply_xfs_quota(username, plan_config.get('disk', 20))
+            
+            # 3. Update Docker Compose override
+            compose_result = self._update_compose_override(username, plan_config, port)
+            
+            # 4. Start container
+            container_result = self._start_container(username)
+            
+            # 5. Wait for health check
+            health_result = self._wait_for_health_check(port, username)
+            
+            # 6. Update Caddy configuration
+            caddy_result = self._update_caddy_config(username, port, bcrypt_hash)
+            
+            return {
+                "status": "success",
+                "username": username,
+                "port": port,
+                "data_dir": data_dir,
+                "quota_applied": quota_result,
+                "compose_updated": compose_result,
+                "container_started": container_result,
+                "health_check_passed": health_result,
+                "caddy_updated": caddy_result
+            }
+            
+        except Exception as e:
+            logger.error(f"Provision failed: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _create_data_directory(self, data_dir: str):
+        """Create data directory with proper permissions"""
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Set ownership to root:root
+        subprocess.run(['chown', 'root:root', data_dir], check=True)
+        
+        # Set permissions to 755
+        subprocess.run(['chmod', '755', data_dir], check=True)
+        
+        logger.info(f"Created data directory: {data_dir}")
+    
+    def _apply_xfs_quota(self, username: str, disk_gib: int) -> bool:
+        """Apply XFS project quota if available"""
+        try:
+            # Check if xfs_quota is available
+            if not shutil.which('xfs_quota'):
+                logger.info("xfs_quota not available, skipping quota setup")
+                return False
+            
+            # Check if filesystem supports project quotas
+            result = subprocess.run([
+                'mount', '|', 'grep', self.data_root
+            ], capture_output=True, text=True, shell=True)
+            
+            if 'pquota' not in result.stdout:
+                logger.info("Filesystem does not support project quotas")
+                return False
+            
+            # Generate project ID based on username hash
+            project_id = 2000 + (hash(username) % 50000)
+            
+            # Add to /etc/projects if not exists
+            projects_file = "/etc/projects"
+            project_line = f"{project_id}:{os.path.join(self.data_root, username)}"
+            
+            if not self._line_exists_in_file(projects_file, project_line):
+                with open(projects_file, 'a') as f:
+                    f.write(f"{project_line}\n")
+            
+            # Add to /etc/projid if not exists
+            projid_file = "/etc/projid"
+            projid_line = f"{username}:{project_id}"
+            
+            if not self._line_exists_in_file(projid_file, projid_line):
+                with open(projid_file, 'a') as f:
+                    f.write(f"{projid_line}\n")
+            
+            # Set project quota
+            subprocess.run([
+                'xfs_quota', '-x', '-c', f'project -s {username}', self.data_root
+            ], check=True)
+            
+            subprocess.run([
+                'xfs_quota', '-x', '-c', f'limit -p bhard={disk_gib}g {username}', self.data_root
+            ], check=True)
+            
+            logger.info(f"Applied XFS quota: {disk_gib}GiB for {username}")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Failed to apply XFS quota: {e}")
+            return False
+    
+    def _line_exists_in_file(self, filepath: str, line: str) -> bool:
+        """Check if line exists in file"""
+        if not os.path.exists(filepath):
+            return False
+        
+        with open(filepath, 'r') as f:
+            return line in f.read()
+    
+    def _update_compose_override(self, username: str, plan_config: Dict[str, Any], 
+                               port: int) -> bool:
+        """Update Docker Compose override file"""
+        try:
+            # Read existing content
+            with open(self.compose_override, 'r') as f:
+                content = f.read()
+            
+            # Check if service already exists
+            if f"  {username}:" in content:
+                logger.warning(f"Service {username} already exists in compose override")
+                return True
+            
+            # Generate service block
+            service_block = self._generate_service_block(username, plan_config, port)
+            
+            # Append to file
+            with open(self.compose_override, 'a') as f:
+                f.write(f"\n{service_block}\n")
+            
+            logger.info(f"Updated compose override for {username}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update compose override: {e}")
+            return False
+    
+    def _generate_service_block(self, username: str, plan_config: Dict[str, Any], 
+                              port: int) -> str:
+        """Generate Docker Compose service block"""
+        gpu_block = ""
+        if plan_config.get('gpu'):
+            gpu_block = """
+    # GPU support
+    device_requests:
+      - driver: nvidia
+        count: 1
+        capabilities: [ [ "gpu" ] ]
+"""
+        
+        return f"""  # --- {username} ---
+  {username}:
+    image: ghcr.io/coder/openvscode-server:1.92.3
+    container_name: dev-{username}
+    hostname: {username}
+    environment:
+      - TZ=Asia/Kuala_Lumpur
+      - VSCODE_SERVER_OPTIONS=--disable-telemetry --disable-workspace-trust
+    ports:
+      - "127.0.0.1:{port}:3000"
+    volumes:
+      - /srv/devdata/{username}:/home/openvscode
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': </dev/tcp/127.0.0.1/3000' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    
+    # Resource limits
+    mem_limit: "{plan_config.get('ram', '4g')}"
+    memswap_limit: "{plan_config.get('ram', '4g')}"
+    cpus: "{plan_config.get('cpu', '2.0')}"
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+      nproc: 1024{gpu_block}
+    
+    labels:
+      - fisamy.role=ovscode
+      - fisamy.user={username}"""
+    
+    def _start_container(self, username: str) -> bool:
+        """Start Docker container"""
+        try:
+            result = subprocess.run([
+                'docker', 'compose', 'up', '-d', username
+            ], cwd=self.coder_lite_path, capture_output=True, text=True, check=True)
+            
+            logger.info(f"Container started for {username}: {result.stdout}")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to start container: {e.stderr}")
+            return False
+    
+    def _wait_for_health_check(self, port: int, username: str, 
+                              timeout: int = 120, interval: int = 5) -> bool:
+        """Wait for container health check to pass"""
+        import time
+        
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            try:
+                # Try to connect to the container
+                result = subprocess.run([
+                    'curl', '-f', '-s', f'http://127.0.0.1:{port}/',
+                    '--connect-timeout', '5', '--max-time', '10'
+                ], capture_output=True)
+                
+                if result.returncode == 0:
+                    logger.info(f"Health check passed for {username} on port {port}")
+                    return True
+                
+            except Exception as e:
+                logger.debug(f"Health check attempt failed: {e}")
+            
+            time.sleep(interval)
+        
+        logger.error(f"Health check timeout for {username} on port {port}")
+        return False
+    
+    def _update_caddy_config(self, username: str, port: int, bcrypt_hash: str) -> bool:
+        """Update Caddy configuration atomically"""
+        try:
+            # Read existing content
+            with open(self.caddy_file, 'r') as f:
+                content = f.read()
+            
+            # Check if host block already exists
+            if f"{username}.code.fisamy.work" in content:
+                logger.warning(f"Host block for {username} already exists in Caddyfile")
+                return True
+            
+            # Generate new host block
+            new_block = f"""
+
+# Auto-generated for {username}
+{username}.code.fisamy.work {{
+  encode gzip
+  
+  @big body {{
+    max_size 20MB
+  }}
+  handle @big {{
+    respond 413
+  }}
+  
+  reverse_proxy 127.0.0.1:{port}
+  
+  basicauth /* {{
+    {username} {bcrypt_hash}
+  }}
+  
+  header {{
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Content-Security-Policy "frame-ancestors 'none';"
+  }}
+}}
+"""
+            
+            # Write to temporary file first
+            temp_file = f"{self.caddy_file}.tmp"
+            with open(temp_file, 'w') as f:
+                f.write(content + new_block)
+            
+            # Validate Caddy configuration
+            result = subprocess.run([
+                'caddy', 'validate', '--config', temp_file
+            ], capture_output=True, text=True, check=True)
+            
+            # Backup existing file
+            backup_file = f"{self.caddy_file}.backup.{int(time.time())}"
+            shutil.copy2(self.caddy_file, backup_file)
+            
+            # Atomic replace
+            os.replace(temp_file, self.caddy_file)
+            
+            # Reload Caddy
+            subprocess.run(['systemctl', 'reload', 'caddy'], check=True)
+            
+            logger.info(f"Caddy configuration updated for {username}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update Caddy config: {e}")
+            return False
+    
+    def cleanup_workspace(self, username: str) -> Dict[str, Any]:
+        """Clean up workspace on failure or deletion"""
+        try:
+            # Stop and remove container
+            subprocess.run([
+                'docker', 'compose', 'stop', username
+            ], cwd=self.coder_lite_path, capture_output=True)
+            
+            subprocess.run([
+                'docker', 'compose', 'rm', '-f', username
+            ], cwd=self.coder_lite_path, capture_output=True)
+            
+            # Remove from compose override
+            self._remove_from_compose_override(username)
+            
+            # Remove data directory
+            data_dir = os.path.join(self.data_root, username)
+            if os.path.exists(data_dir):
+                shutil.rmtree(data_dir)
+            
+            # Remove from Caddyfile
+            self._remove_from_caddy_config(username)
+            
+            # Reload Caddy
+            subprocess.run(['systemctl', 'reload', 'caddy'], check=True)
+            
+            return {
+                "status": "success",
+                "message": f"Workspace {username} cleaned up successfully"
+            }
+            
+        except Exception as e:
+            logger.error(f"Cleanup failed for {username}: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def _remove_from_compose_override(self, username: str):
+        """Remove user service from compose override"""
+        # This is a simplified removal - in production you'd want more sophisticated parsing
+        try:
+            with open(self.compose_override, 'r') as f:
+                lines = f.readlines()
+            
+            # Find and remove the service block
+            new_lines = []
+            skip_mode = False
+            
+            for line in lines:
+                if line.strip() == f"  {username}:":
+                    skip_mode = True
+                    continue
+                elif skip_mode and line.startswith("  ") and ":" in line and not line.strip().startswith("#"):
+                    skip_mode = False
+                
+                if not skip_mode:
+                    new_lines.append(line)
+            
+            # Write back
+            with open(self.compose_override, 'w') as f:
+                f.writelines(new_lines)
+                
+        except Exception as e:
+            logger.error(f"Failed to remove from compose override: {e}")
+    
+    def _remove_from_caddy_config(self, username: str):
+        """Remove user host block from Caddyfile"""
+        try:
+            with open(self.caddy_file, 'r') as f:
+                content = f.read()
+            
+            # Simple removal - in production you'd want more sophisticated parsing
+            import re
+            pattern = rf"# Auto-generated for {username}.*?}}"
+            new_content = re.sub(pattern, "", content, flags=re.DOTALL)
+            
+            with open(self.caddy_file, 'w') as f:
+                f.write(new_content)
+                
+        except Exception as e:
+            logger.error(f"Failed to remove from Caddy config: {e}")
+
+def main():
+    """Main entry point"""
+    if len(sys.argv) != 2:
+        print("Usage: sudo dev-provision <json_config>")
+        sys.exit(1)
+    
+    try:
+        # Parse JSON configuration
+        config = json.loads(sys.argv[1])
+        
+        # Validate required fields
+        required_fields = ['action', 'username']
+        for field in required_fields:
+            if field not in config:
+                raise ValueError(f"Missing required field: {field}")
+        
+        # Create helper instance
+        helper = DevProvisionHelper()
+        
+        # Execute action
+        if config['action'] == 'provision':
+            if 'plan_config' not in config or 'port' not in config or 'bcrypt_hash' not in config:
+                raise ValueError("Missing fields for provision action")
+            
+            result = helper.provision_workspace(config)
+            
+        elif config['action'] == 'cleanup':
+            result = helper.cleanup_workspace(config['username'])
+            
+        else:
+            raise ValueError(f"Unknown action: {config['action']}")
+        
+        # Output result as JSON
+        print(json.dumps(result, indent=2))
+        
+        # Exit with appropriate code
+        sys.exit(0 if result.get('status') == 'success' else 1)
+        
+    except Exception as e:
+        error_result = {
+            "status": "error",
+            "error": str(e)
+        }
+        print(json.dumps(error_result, indent=2))
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

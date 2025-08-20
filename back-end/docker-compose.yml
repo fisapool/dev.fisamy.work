@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  bff:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - CODER_HOST=${CODER_HOST}
+      - CODER_API_TOKEN=${CODER_API_TOKEN}
+      - DOMAIN_MANAGER_TOKEN=${DOMAIN_MANAGER_TOKEN}
+      - DOMAIN_MANAGER_URL=${DOMAIN_MANAGER_URL}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis for rate limiting (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+# volumes:
+#   redis_data:

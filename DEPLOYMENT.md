@@ -32,13 +32,13 @@ npm run build
 ### 3. Backend Infrastructure
 
 ```bash
-cd backend/openvscode-template
+cd back-end/openvscode-template
 
 # Initialize Terraform
 ./init.sh
 
 # Deploy template to Coder
-coder templates push vscode-ai --directory backend/openvscode-template
+coder templates push vscode-ai --directory back-end/openvscode-template
 ```
 
 ## Detailed Deployment
@@ -62,7 +62,7 @@ coder templates push vscode-ai --directory backend/openvscode-template
 #### Option A: MVP (Simple, <10 users)
 
 ```bash
-cd backend/vscode-hosting-mvp
+cd back-end/vscode-hosting-mvp
 
 # Generate password hash
 docker run --rm caddy caddy hash-password --plaintext 'YourPassword'
@@ -77,7 +77,7 @@ docker compose up -d
 #### Option B: Provider-Grade (Recommended)
 
 ```bash
-cd backend/coder-provider
+cd back-end/coder-provider
 
 # Set environment variables
 export CODER_PG_PASSWORD="$(openssl rand -base64 24 | tr -d '=+/')"
@@ -100,7 +100,7 @@ docker exec -it coder coder users create \
 ### Terraform Template Deployment
 
 ```bash
-cd backend/openvscode-template
+cd back-end/openvscode-template
 
 # Initialize
 terraform init

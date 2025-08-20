@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# devctl USER [--cpu 2] [--ram 4g] [--disk 20] [--port 13001] [--domain user.example.com] [--caddy-file /etc/caddy/Caddyfile] [--reload-caddy]
+# - Appends a per-user service under services: in docker-compose.override.yml
+# - Ensures the override file has a proper header (version + services)
+# - Creates /srv/devdata/USER (and XFS quota if available)
+# - Picks a free port if --port is not provided
+# - Optionally writes a Caddy site block for the provided --domain and reloads Caddy
+# - Requires: docker, (optionally) xfs_quota, awk, sed; systemd for --reload-caddy
+
+usage() {
+  cat >&2 <<USAGE
+Usage: $0 USER [--cpu N] [--ram SIZE] [--disk GiB] [--port PORT] [--domain HOST] [--caddy-file PATH] [--reload-caddy]
+Defaults: --cpu 2 --ram 4g --disk 20 --port <auto from 13001>
+USAGE
+}
+
+USER="${1:-}"
+[[ -z "${USER}" ]] && usage && exit 1
+shift || true
+
+CPU="2"
+RAM="4g"
+DISK="20"
+PORT=""
+DOMAIN=""
+CADDY_FILE="Caddyfile"
+RELOAD_CADDY=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cpu) CPU="${2:?}"; shift 2 ;;
+    --ram) RAM="${2:?}"; shift 2 ;;
+    --disk) DISK="${2:?}"; shift 2 ;;
+    --port) PORT="${2:?}"; shift 2 ;;
+    --domain) DOMAIN="${2:?}"; shift 2 ;;
+    --caddy-file) CADDY_FILE="${2:?}"; shift 2 ;;
+    --reload-caddy) RELOAD_CADDY=1; shift 1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage; exit 1 ;;
+  esac
+done
+
+DATA_ROOT="/srv/devdata"
+COMPOSE_OVERRIDE="docker-compose.override.yml"
+
+# Ensure data dir
+sudo mkdir -p "${DATA_ROOT}/${USER}"
+sudo chown root:root "${DATA_ROOT}/${USER}"
+sudo chmod 755 "${DATA_ROOT}/${USER}"
+
+# Apply XFS project quota if available
+if command -v xfs_quota >/dev/null 2>&1; then
+  # simple project id allocator based on username hash
+  PID=$(( 2000 + ($(echo -n "${USER}" | cksum | awk '{print $1}') % 50000) ))
+  grep -qE "^${PID}:${DATA_ROOT}/${USER}$" /etc/projects 2>/dev/null || echo "${PID}:${DATA_ROOT}/${USER}" | sudo tee -a /etc/projects >/dev/null
+  grep -qE "^${USER}:${PID}$" /etc/projid 2>/dev/null || echo "${USER}:${PID}" | sudo tee -a /etc/projid >/dev/null
+  sudo xfs_quota -x -c "project -s ${USER}" "${DATA_ROOT}" || true
+  sudo xfs_quota -x -c "limit -p bhard=${DISK}g ${USER}" "${DATA_ROOT}" || true
+fi
+
+# Find a free port starting from 13001 if not provided
+pick_port() {
+  local p=13001
+  while ss -ltn | awk '{print $4}' | grep -q ":$p$"; do
+    p=$((p+1))
+  done
+  echo "$p"
+}
+if [[ -z "$PORT" ]]; then
+  PORT="$(pick_port)"
+fi
+
+# Ensure compose override has header and services key
+init_compose_override() {
+  if [[ ! -s "${COMPOSE_OVERRIDE}" ]]; then
+    cat > "${COMPOSE_OVERRIDE}" <<'HDR'
+version: "3.9"
+
+services:
+HDR
+    return
+  fi
+  if ! grep -qE '^services:\s*$' "${COMPOSE_OVERRIDE}"; then
+    echo >> "${COMPOSE_OVERRIDE}"
+    echo 'services:' >> "${COMPOSE_OVERRIDE}"
+  fi
+}
+
+init_compose_override
+
+# Prevent duplicate blocks
+if grep -qE "^\s{2}${USER}:\s*$" "${COMPOSE_OVERRIDE}"; then
+  echo "Service '${USER}' already present in ${COMPOSE_OVERRIDE}. Skipping compose append." >&2
+else
+  # Append service block indented under services:
+  cat >> "${COMPOSE_OVERRIDE}" <<YML
+
+  # --- ${USER} ---
+  ${USER}:
+    image: ghcr.io/coder/openvscode-server:latest
+    container_name: dev-${USER}
+    environment:
+      - TZ=\${TZ:-Asia/Kuala_Lumpur}
+    ports:
+      - "127.0.0.1:${PORT}:3000"
+    volumes:
+      - ${DATA_ROOT}/${USER}:/home/openvscode
+    restart: unless-stopped
+    mem_limit: "${RAM}"
+    memswap_limit: "${RAM}"
+    cpus: "${CPU}"
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+      nproc: 1024
+    labels:
+      - fisamy.role=ovscode
+      - fisamy.user=${USER}
+YML
+fi
+
+echo "User '${USER}' added with CPU=${CPU}, RAM=${RAM}, DISK=${DISK}GiB, PORT=${PORT}"
+echo "Start it with: docker compose up -d ${USER}"
+
+# Optionally write a Caddy site block
+if [[ -n "${DOMAIN}" ]]; then
+  if [[ ! -f "${CADDY_FILE}" ]]; then
+    echo "Caddyfile not found at ${CADDY_FILE}, creating a new one." >&2
+    cat > "${CADDY_FILE}" <<'CADDYHDR'
+{
+  email admin@example.com
+}
+CADDYHDR
+  fi
+  if grep -qE "^${DOMAIN}\s*\{" "${CADDY_FILE}"; then
+    echo "Caddy block for ${DOMAIN} already exists in ${CADDY_FILE}. Skipping." >&2
+  else
+    cat >> "${CADDY_FILE}" <<CADDY
+
+${DOMAIN} {
+  encode gzip
+  # Basic auth (optional). Generate bcrypt: htpasswd -nbB ${USER} 'StrongPassword' | sed 's/\$/\$\$/g'
+  # basicauth /* {
+  #   ${USER} $2y$05$replace_me_with_a_real_bcrypt_hash
+  # }
+  reverse_proxy 127.0.0.1:${PORT}
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+}
+CADDY
+    echo "Added Caddy site for ${DOMAIN} -> 127.0.0.1:${PORT} in ${CADDY_FILE}"
+  fi
+
+  if [[ ${RELOAD_CADDY} -eq 1 ]]; then
+    echo "Reloading caddy via systemctl..."
+    if sudo systemctl reload caddy; then
+      echo "Caddy reloaded."
+    else
+      echo "Caddy reload failed; please reload manually." >&2
+    fi
+  fi
+fi
+
+echo "Remember to add/verify DNS: ${DOMAIN:-<user.domain>} -> server IP"

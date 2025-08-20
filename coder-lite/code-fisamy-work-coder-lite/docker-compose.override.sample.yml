@@ -1,0 +1,52 @@
+version: "3.9"
+
+# Copy to: docker-compose.override.yml
+# Then duplicate the 'aria' service per user and adjust:
+#  - ports: "127.0.0.1:13001:3000"
+#  - volumes: "/srv/devdata/aria:/home/openvscode"
+#  - labels fisamy.user
+#  - mem_limit/cpus/etc
+
+services:
+  aria:
+    # Pin version to avoid drift (example tag; update as needed):
+    # image: ghcr.io/coder/openvscode-server:1.92.3
+    image: ghcr.io/coder/openvscode-server:latest
+    container_name: dev-aria
+    environment:
+      - TZ=${TZ:-Asia/Kuala_Lumpur}
+    ports:
+      - "127.0.0.1:13001:3000"
+    volumes:
+      - /srv/devdata/aria:/home/openvscode
+    restart: unless-stopped
+
+    # Optional healthcheck (uncomment if image includes bash or nc)
+    # healthcheck:
+    #   test: ["CMD-SHELL", "bash -c ': </dev/tcp/127.0.0.1/3000' || exit 1"]
+    #   interval: 15s
+    #   timeout: 3s
+    #   retries: 10
+    #   start_period: 10s
+
+    # ---- LIMITS (tune per user) ----
+    mem_limit: "4g"
+    memswap_limit: "4g"   # disable swap by setting equal to mem_limit
+    cpus: "2.0"
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+      nproc: 1024
+
+    # ---- GPU (optional) ----
+    # device_requests:
+    #   - driver: nvidia
+    #     count: 1
+    #     capabilities: [ [ "gpu" ] ]
+    #     # device_ids: [ "0" ]   # uncomment to pin a specific GPU
+
+    labels:
+      - fisamy.role=ovscode
+      - fisamy.user=aria
