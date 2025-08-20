@@ -7,15 +7,26 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Dependencies
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
 *.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
 *.suo
 *.ntvs*
@@ -24,12 +35,47 @@ dist-ssr
 *.sw?
 .vercel
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+cover/
+
+# FastAPI / Backend
+back-end/.env
+back-end/.env.*
+back-end/__pycache__/
+back-end/*.pyc
+back-end/.pytest_cache/
+
 # Terraform
 .terraform/
 *.tfstate
 *.tfstate.*
 *.tfvars
 .terraform.lock.hcl
+# Terraform provider binaries (large files)
+**/.terraform/providers/
+**/.terraform/providers/**/*
 
 # Large files
 *.tar.gz
@@ -37,12 +83,73 @@ dist-ssr
 *.rar
 *.7z
 
+# Template archives
+back-end/scripts/templates/*.zip
+back-end/scripts/templates/*.tar.gz
+
 # Environment files
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
+.env.test
 
 # OS generated files
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage and testing
+coverage/
+*.lcov
+.nyc_output
+lib-cov
+
+# Node.js specific
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+.lock-wscript
+build/Release
+*.tsbuildinfo
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Build tool caches
+.cache
+.parcel-cache
+.grunt
+
+# Framework specific
+.next
+.nuxt
+public
+.cache/
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# Vite
+.vite/
+
+# Cursor
+.cursor/
