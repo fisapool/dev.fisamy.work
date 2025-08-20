@@ -1,0 +1,40 @@
+---
+alwaysApply: false
+description: Deployment & operations runbook. Apply manually when working on prod.
+priority: 50
+tags: ["ops","deploy","systemd","docker","caddy","security"]
+---
+
+# Deployment & Ops (Prod)
+
+## Minimal env (edit to match infra)
+```env
+REDIS_HOST=localhost
+REDIS_PORT=6379
+HOST=0.0.0.0
+PORT=8000
+START_PORT=13001
+# Optional: END_PORT, AUTH secrets, etc.
+```
+
+## Systemd skeleton
+
+* Run the backend as a dedicated user.
+* Restart on failure, log to journald.
+
+## Network hygiene
+
+* Expose API (8000/tcp).
+* Keep Redis local-only (bind 127.0.0.1). Don't open 6379 to the world.
+
+## Caddy/Docker safety
+
+* **Always** validate config before reload, and perform atomic replace.
+* Keep a rolling N-backup of configs.
+
+## Observability
+
+* Scrape `/metrics` with Prometheus; alert on:
+
+  * `provision_jobs_total{result="failure"} > 0` in 5m
+  * Health status != healthy for 2m

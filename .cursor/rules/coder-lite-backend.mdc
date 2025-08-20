@@ -1,0 +1,56 @@
+
+# Coder-lite Provision System — Core
+
+## Architecture (source of truth)
+- **FastAPI** backend that receives order webhooks → enqueues provision job → orchestrates Docker + Caddy updates → exposes health/metrics.
+- **Redis** used for queueing and **idempotency locks** to avoid duplicate order handling.
+- **Ports** are **allocated once** and must be **released on failure**.
+- **Metrics** exported via `/metrics`; health via `/health`.
+
+## Files (present in this repo)
+- [main.py](mdc:coder-lite/code-fisamy-work-coder-lite/main.py)
+- [BACKEND_README.md](mdc:coder-lite/code-fisamy-work-coder-lite/BACKEND_README.md)
+- (If present) `run_backend.py`, `requirements.txt`, `test_backend.py`, `env.example`
+
+> If a referenced file isn't in this repo, **don't invent it**. Prefer adding a TODO in code.
+
+## Quick start (local)
+```bash
+cd coder-lite/code-fisamy-work-coder-lite
+python3 -m pip install -r requirements.txt || true
+redis-cli ping || sudo systemctl start redis-server
+python3 -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## Stable endpoints (do not rename without updating docs)
+
+* `GET /` → service info
+* `GET /health` → { status: "healthy" | "degraded" | "down", ... }
+* `GET /metrics` → Prometheus text format
+* `POST /webhooks/orders` → accepts order payload; must be **idempotent**
+* (If present) `POST /provision/process` and `GET /provision/status`
+
+## Invariants (hard rules)
+
+* **Idempotency:** Same order ID must be processed exactly once.
+* **Atomic config writes:** Caddy/Compose updates are written via temp file + rename; never partial writes.
+* **Port safety:** Allocate → use → release (even on error).
+* **Fail loud with context:** Log structured errors; include order_id, lock_key, port.
+
+## Do / Don't (guardrails)
+
+* ✅ Use Redis locks for anything keyed by order/workspace.
+* ✅ Return precise HTTP codes (400 user error, 409 conflict/idempotency, 5xx infra).
+* ✅ Record metrics on **both** success and failure paths.
+* ❌ Don't shell out to Docker/Caddy without checking return codes.
+* ❌ Don't mutate shared configs without an atomic write + backup.
+
+## Troubleshooting crib notes
+
+* Redis dead? `sudo systemctl status redis-server`
+* Port conflict? `ss -ltnp | grep :8000`
+* Caddy not reloading? Check exit code + last config diff.
+
+- Monitor metrics endpoint for system health
+- Use environment variables for configuration
+- Check Redis connection before starting backend

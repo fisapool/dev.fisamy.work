@@ -1,0 +1,15 @@
+---
+globs:
+  - "coder-lite/**/*.py"
+description: Security guardrails for API and shell-outs.
+priority: 85
+tags: ["security","validation","safe-shell"]
+---
+
+# Security guardrails
+
+- Validate all webhook payload fields (types, ranges). Reject unknown fields (400).
+- Never shell-out without checking exit codes; use timeout; capture stdout+stderr.
+- Don't log secrets or full payloads; log order_id, user_id, and minimal trace IDs.
+- Rate-limit webhook endpoint if exposed publicly (or require a shared signature).
+- Use constant-time compare for signatures if implemented.

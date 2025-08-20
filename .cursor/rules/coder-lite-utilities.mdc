@@ -1,0 +1,53 @@
+---
+globs:
+  - "coder-lite/**/*.py"
+description: Utilities, worker patterns, idempotency, metrics. Applies only to Python files here.
+priority: 70
+tags: ["python","patterns","idempotency","metrics"]
+---
+
+# Utilities & Worker Patterns
+
+## Locking & idempotency
+- Use a **Redis-backed lock** keyed as `order:{order_id}` (or similar).
+- Pattern:
+```python
+lock_key = f"order:{order_id}"
+with acquire_lock(redis, lock_key, ttl=300):
+    # re-check idempotency before doing side effects
+```
+
+## Port allocation (if implemented)
+
+* API contract (do not break):
+
+  * `allocate_port() -> int` raises on exhaustion
+  * `release_port(port: int) -> None` must not raise if port not allocated
+  * `is_available(port: int) -> bool`
+
+## Metrics
+
+* Minimum counters/histograms:
+
+  * `provision_jobs_total{result=success|failure}`
+  * `provision_duration_seconds` (histogram)
+  * `webhooks_total{route="/webhooks/orders",code="2xx|4xx|5xx"}`
+
+## Error handling template
+
+```python
+try:
+    start = time.perf_counter()
+    # ... work ...
+    metrics.provision_jobs_total.labels(result="success").inc()
+finally:
+    metrics.provision_duration_seconds.observe(time.perf_counter() - start)
+```
+
+## Safe file writes
+
+* Write to `*.tmp`, `fsync()`, then `os.replace(tmp, target)`.
+
+## Don't leak ports
+
+* Wrap alloc/use/release in `try/finally`.

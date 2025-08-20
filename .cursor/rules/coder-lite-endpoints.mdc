@@ -1,0 +1,29 @@
+---
+description: Practical curl examples and expected shapes for Coder-lite endpoints.
+priority: 65
+tags: ["api","docs","testing"]
+---
+
+# Endpoint Quick Tests
+
+## Health
+```bash
+curl -s http://localhost:8000/health | jq
+# Expect: {"status":"healthy", "services":{"redis":"connected", ...}}
+```
+
+## Metrics
+
+```bash
+curl -s http://localhost:8000/metrics | head
+# Expect Prometheus text exposition format
+```
+
+## Orders webhook (idempotent)
+
+```bash
+curl -s -X POST http://localhost:8000/webhooks/orders \
+  -H 'content-type: application/json' \
+  -d '{"order_id":"ord_123","user_email":"u@example.com","plan":"pro"}' | jq
+# 200 on first; 409 or 200(idempotent) on repeated with no side effects.
+```
